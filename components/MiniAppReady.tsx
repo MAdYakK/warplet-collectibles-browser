@@ -4,16 +4,22 @@ import { useEffect } from 'react'
 
 export default function MiniAppReady() {
   useEffect(() => {
-    // Only run inside miniapp runtimes
-    const isMiniApp = typeof window !== 'undefined' && Boolean((window as any).farcaster)
-    if (!isMiniApp) return
+    let cancelled = false
 
     ;(async () => {
-      // Dynamic import so the SDK is never loaded in normal browser mode
-      const { sdk } = await import('@farcaster/miniapp-sdk')
-      // Tell the client we're ready to display / fully initialize
-      await sdk.actions.ready()
+      try {
+        const { sdk } = await import('@farcaster/miniapp-sdk')
+        if (cancelled) return
+        await sdk.actions.ready()
+      } catch {
+        // Not in Warpcast / preview runtime (or SDK not available).
+        // Ignore so normal browsers don't break.
+      }
     })()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return null
