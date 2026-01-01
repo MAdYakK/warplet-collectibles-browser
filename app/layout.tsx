@@ -1,6 +1,10 @@
 import './globals.css'
 import type { Metadata } from 'next'
-import Providers from '../components/Providers'
+import MiniAppReady from '../components/MiniAppReady'
+
+function Providers({ children }: { children: React.ReactNode }) {
+  return <>{children}</>
+}
 
 export const metadata: Metadata = {
   title: 'Warplet Collectibles Browser',
@@ -11,7 +15,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <MiniAppReady />
+          {children}
+        </Providers>
       </body>
     </html>
   )

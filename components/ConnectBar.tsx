@@ -1,13 +1,28 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAccount, useConnect } from 'wagmi'
+
+function isMiniAppRuntime() {
+  return typeof window !== 'undefined' && Boolean((window as any).farcaster)
+}
 
 export default function ConnectBar() {
   const { isConnected, address } = useAccount()
   const { connect, connectors, isPending, error } = useConnect()
 
-  // Pick the first available connector safely
-  const primaryConnector = connectors.find((c) => c.ready)
+  const primary = connectors.find((c) => c.ready)
+
+  // ✅ Auto-connect inside Warpcast preview/miniapp
+  useEffect(() => {
+    if (!isMiniAppRuntime()) return
+    if (isConnected) return
+    if (!primary) return
+    if (isPending) return
+
+    connect({ connector: primary })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, primary?.id])
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border p-3">
@@ -22,14 +37,10 @@ export default function ConnectBar() {
       {!isConnected ? (
         <button
           className="shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold active:scale-[0.99]"
-          onClick={() => primaryConnector && connect({ connector: primaryConnector })}
-          disabled={isPending || !primaryConnector}
+          onClick={() => primary && connect({ connector: primary })}
+          disabled={isPending || !primary}
         >
-          {isPending
-            ? 'Connecting…'
-            : primaryConnector
-            ? 'Connect'
-            : 'Open in Warpcast'}
+          {isPending ? 'Connecting…' : primary ? 'Connect' : 'Open in Warpcast'}
         </button>
       ) : (
         <div className="text-xs rounded-xl bg-neutral-100 px-3 py-2">Ready</div>
