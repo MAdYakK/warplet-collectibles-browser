@@ -1,35 +1,52 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useAccount, useConnect } from 'wagmi'
 
-function isMiniAppRuntime() {
-  return typeof window !== 'undefined' && Boolean((window as any).farcaster)
+function isProbablyMiniApp() {
+  if (typeof window === 'undefined') return false
+  // Preview and Warpcast may not always set window.farcaster immediately,
+  // so also treat being inside an iframe as "probably miniapp".
+  const inIframe = window.self !== window.top
+  const hasFarcasterGlobal = Boolean((window as any).farcaster)
+  return hasFarcasterGlobal || inIframe
 }
 
 export default function ConnectBar() {
   const { isConnected, address } = useAccount()
   const { connect, connectors, isPending, error } = useConnect()
 
-  const primary = connectors.find((c) => c.ready)
+  const miniApp = useMemo(() => isProbablyMiniApp(), [])
 
-  // ✅ Auto-connect inside Warpcast preview/miniapp
+  // Prefer a ready connector, but if none are marked ready yet,
+  // still allow trying the first connector (miniapp connector often becomes ready after init).
+  const primary =
+    connectors.find((c) => c.ready) ||
+    (connectors.length ? connectors[0] : undefined)
+
+  // Auto-connect inside miniapp/preview once we have a connector
   useEffect(() => {
-    if (!isMiniAppRuntime()) return
+    if (!miniApp) return
     if (isConnected) return
     if (!primary) return
     if (isPending) return
-
     connect({ connector: primary })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, primary?.id])
+  }, [miniApp, isConnected, primary?.id])
+
+  const rightLabel = (() => {
+    if (isConnected) return 'Ready'
+    if (isPending) return 'Connecting…'
+    if (!primary) return miniApp ? 'Loading…' : 'Open in Warpcast'
+    return 'Connect'
+  })()
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border p-3">
       <div className="min-w-0">
         <div className="text-sm font-semibold">Warplet Collectibles Browser</div>
         <div className="text-xs text-neutral-500 truncate">
-          {isConnected ? `Connected: ${address}` : 'Not connected'}
+          {isConnected ? `Connected: ${address}` : miniApp ? 'Connecting wallet…' : 'Not connected'}
         </div>
         {error ? <div className="mt-1 text-xs text-red-600">{error.message}</div> : null}
       </div>
@@ -38,9 +55,9 @@ export default function ConnectBar() {
         <button
           className="shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold active:scale-[0.99]"
           onClick={() => primary && connect({ connector: primary })}
-          disabled={isPending || !primary}
+          disabled={isPending || (!primary && miniApp)}
         >
-          {isPending ? 'Connecting…' : primary ? 'Connect' : 'Open in Warpcast'}
+          {rightLabel}
         </button>
       ) : (
         <div className="text-xs rounded-xl bg-neutral-100 px-3 py-2">Ready</div>
