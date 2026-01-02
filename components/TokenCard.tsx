@@ -49,7 +49,12 @@ const openSeaAssetUrl = (chain: string, contractAddress: string, tokenId: string
 const SHARE_TEXT =
   'Shared from Warplet Collectibles Browser by @madyak! It is easy to view your NFTs now, check it out!'
 
-export default function TokenCard({ nft }: { nft: NftItem }) {
+type Props = {
+  nft: NftItem
+  variant?: 'cards' | 'grid'
+}
+
+export default function TokenCard({ nft, variant = 'cards' }: Props) {
   const { address } = useAccount()
   const { writeContractAsync } = useWriteContract()
   const [sendOpen, setSendOpen] = useState(false)
@@ -73,31 +78,89 @@ export default function TokenCard({ nft }: { nft: NftItem }) {
 
   // Share: use composeCast inside Warpcast; otherwise, show a helpful fallback
   const share = async () => {
-  const appUrl = getMiniAppUrl()
+    const appUrl = getMiniAppUrl()
 
-  if (isFarcasterMiniApp()) {
-    const { sdk } = await import('@farcaster/miniapp-sdk')
+    if (isFarcasterMiniApp()) {
+      const { sdk } = await import('@farcaster/miniapp-sdk')
 
-    // Build strict tuple type: [] | [string] | [string, string]
-    const embeds: [] | [string] | [string, string] =
-      img && appUrl ? [img, appUrl] :
-      img ? [img] :
-      appUrl ? [appUrl] :
-      []
+      // Build strict tuple type: [] | [string] | [string, string]
+      const embeds: [] | [string] | [string, string] =
+        img && appUrl ? [img, appUrl] : img ? [img] : appUrl ? [appUrl] : []
 
-    await sdk.actions.composeCast({
-      text: SHARE_TEXT,
-      embeds,
-    })
-  } else {
-    // Browser fallback: open a cast intent URL (optional)
-    // Or just alert. We'll do a helpful fallback here:
-    const msg = `${SHARE_TEXT}\n\n${appUrl || ''}`.trim()
-    alert(`Open in Warpcast to share.\n\nCopy text:\n${msg}`)
+      await sdk.actions.composeCast({
+        text: SHARE_TEXT,
+        embeds,
+      })
+    } else {
+      const msg = `${SHARE_TEXT}\n\n${appUrl || ''}`.trim()
+      alert(`Open in Warpcast to share.\n\nCopy text:\n${msg}`)
+    }
   }
-}
 
+  // ------- GRID VARIANT (compact) -------
+  if (variant === 'grid') {
+    return (
+      <div className="rounded-2xl border overflow-hidden bg-white">
+        <button className="block w-full" onClick={() => openUrl(osUrl)}>
+          <div className="rounded-2xl border-0 overflow-hidden bg-neutral-50">
+            {img ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={img}
+                alt={nft.name ?? `#${nft.tokenId}`}
+                className="w-full aspect-square object-cover block"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full aspect-square flex items-center justify-center text-xs text-neutral-400">
+                No image
+              </div>
+            )}
+          </div>
+        </button>
 
+        <div className="px-3 py-2">
+          <div className="text-xs font-semibold truncate">
+            {nft.name ?? `Token #${nft.tokenId}`}
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              className="rounded-xl border px-3 py-2 text-xs font-semibold"
+              onClick={() => setSendOpen(true)}
+            >
+              Send
+            </button>
+
+            <button
+              className="rounded-xl border px-3 py-2 text-xs font-semibold"
+              onClick={share}
+            >
+              Share
+            </button>
+          </div>
+        </div>
+
+        <SendModal
+          open={sendOpen}
+          onClose={() => setSendOpen(false)}
+          title={`Send Token #${nft.tokenId}`}
+          onConfirm={async (to) => {
+            if (!address) throw new Error('Wallet not connected')
+
+            await writeContractAsync({
+              address: nft.contractAddress as `0x${string}`,
+              abi: erc721Abi,
+              functionName: 'safeTransferFrom',
+              args: [address, to, BigInt(nft.tokenId)],
+            })
+          }}
+        />
+      </div>
+    )
+  }
+
+  // ------- CARDS VARIANT (your current layout) -------
   return (
     <div className="rounded-3xl border overflow-hidden bg-white">
       <button className="block w-full" onClick={() => openUrl(osUrl)}>
@@ -129,10 +192,7 @@ export default function TokenCard({ nft }: { nft: NftItem }) {
             Send
           </button>
 
-          <button
-            className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-            onClick={share}
-          >
+          <button className="rounded-2xl border px-4 py-3 text-sm font-semibold" onClick={share}>
             Share
           </button>
         </div>
