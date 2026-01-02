@@ -31,8 +31,6 @@ export default function CollectionClient() {
   const [err, setErr] = useState<string | null>(null)
   const [nfts, setNfts] = useState<NftItem[]>([])
 
-  
-
   const { mode, setMode } = useViewMode({
     storageKey: 'warplet:collectionViewMode',
     defaultMode: 'cards',
@@ -76,30 +74,31 @@ export default function CollectionClient() {
     <main className="mx-auto max-w-md bg-neutral-50 min-h-screen">
       <div className="sticky top-0 z-40 bg-neutral-50/90 backdrop-blur border-b">
         <div className="p-3 flex items-center justify-between gap-3">
+          {/* ✅ Back button to real home route */}
           <Link
-            href="/collection"
+            href="/"
             className="
               rounded-full
               border
               px-4 py-2
               text-xs font-semibold
-              bg-white/60
+              bg-white/70
               backdrop-blur
               border-neutral-200
-              active:scale-[0.99]
+              active:scale-[0.98]
               transition
             "
           >
-            Home
+            Back
           </Link>
 
           <div className="flex items-center gap-2">
-            <div className="rounded-full border p-1 flex items-center gap-1 bg-white/60 backdrop-blur border-neutral-200">
+            <div className="rounded-full border p-1 flex items-center gap-1 bg-white/70 backdrop-blur border-neutral-200">
               <button
                 type="button"
                 onClick={() => setMode('cards')}
                 className={[
-                  'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.99]',
+                  'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]',
                   mode === 'cards' ? 'bg-neutral-900 text-white' : 'text-neutral-900',
                 ].join(' ')}
                 aria-pressed={mode === 'cards'}
@@ -110,7 +109,7 @@ export default function CollectionClient() {
                 type="button"
                 onClick={() => setMode('grid')}
                 className={[
-                  'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.99]',
+                  'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]',
                   mode === 'grid' ? 'bg-neutral-900 text-white' : 'text-neutral-900',
                 ].join(' ')}
                 aria-pressed={mode === 'grid'}

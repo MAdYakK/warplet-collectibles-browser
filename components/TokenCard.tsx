@@ -6,43 +6,23 @@ import { erc721Abi } from 'viem'
 import type { NftItem } from '../lib/types'
 import SendModal from './SendModal'
 
-/**
- * Detect if we are running inside the Farcaster/Warpcast miniapp runtime.
- * Warpcast injects a global `window.farcaster` object.
- */
 function isFarcasterMiniApp(): boolean {
   if (typeof window === 'undefined') return false
   return Boolean((window as any).farcaster)
 }
 
 function getMiniAppUrl() {
-  // Prefer explicit env var for production
   const envUrl = process.env.NEXT_PUBLIC_APP_URL
   if (envUrl) return envUrl
-
-  // Fallback for dev / preview
   if (typeof window !== 'undefined') return window.location.origin
   return ''
 }
 
-/**
- * Build an OpenSea asset URL for a given chain, contract and tokenId.
- * (You can expand this mapping as needed.)
- */
 const openSeaAssetUrl = (chain: string, contractAddress: string, tokenId: string) => {
   const c = (chain || '').toLowerCase()
-
-  if (c === 'polygon' || c === 'matic') {
-    return `https://opensea.io/assets/matic/${contractAddress}/${tokenId}`
-  }
-  if (c === 'optimism') {
-    return `https://opensea.io/assets/optimism/${contractAddress}/${tokenId}`
-  }
-  if (c === 'base') {
-    return `https://opensea.io/assets/base/${contractAddress}/${tokenId}`
-  }
-
-  // Default to Ethereum/mainnet path
+  if (c === 'polygon' || c === 'matic') return `https://opensea.io/assets/matic/${contractAddress}/${tokenId}`
+  if (c === 'optimism') return `https://opensea.io/assets/optimism/${contractAddress}/${tokenId}`
+  if (c === 'base') return `https://opensea.io/assets/base/${contractAddress}/${tokenId}`
   return `https://opensea.io/assets/ethereum/${contractAddress}/${tokenId}`
 }
 
@@ -66,7 +46,6 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
 
   const img = nft.image
 
-  // Open URL: use miniapp API inside Warpcast; otherwise, open a normal browser tab
   const openUrl = async (url: string) => {
     if (isFarcasterMiniApp()) {
       const { sdk } = await import('@farcaster/miniapp-sdk')
@@ -76,35 +55,28 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
     }
   }
 
-  // Share: use composeCast inside Warpcast; otherwise, show a helpful fallback
   const share = async () => {
     const appUrl = getMiniAppUrl()
 
     if (isFarcasterMiniApp()) {
       const { sdk } = await import('@farcaster/miniapp-sdk')
-
-      // Build strict tuple type: [] | [string] | [string, string]
       const embeds: [] | [string] | [string, string] =
         img && appUrl ? [img, appUrl] : img ? [img] : appUrl ? [appUrl] : []
 
-      await sdk.actions.composeCast({
-        text: SHARE_TEXT,
-        embeds,
-      })
+      await sdk.actions.composeCast({ text: SHARE_TEXT, embeds })
     } else {
       const msg = `${SHARE_TEXT}\n\n${appUrl || ''}`.trim()
       alert(`Open in Warpcast to share.\n\nCopy text:\n${msg}`)
     }
   }
 
-  // ------- GRID VARIANT (compact) -------
+  /* ---------------- GRID VARIANT ---------------- */
   if (variant === 'grid') {
     return (
-      <div className="rounded-2xl border overflow-hidden bg-white">
+      <div className="rounded-3xl border bg-white/70 backdrop-blur overflow-hidden shadow-sm">
         <button className="block w-full" onClick={() => openUrl(osUrl)}>
-          <div className="rounded-2xl border-0 overflow-hidden bg-neutral-50">
+          <div className="rounded-3xl overflow-hidden bg-neutral-50">
             {img ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={img}
                 alt={nft.name ?? `#${nft.tokenId}`}
@@ -119,22 +91,33 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
           </div>
         </button>
 
-        <div className="px-3 py-2">
+        <div className="px-3 py-3">
           <div className="text-xs font-semibold truncate">
             {nft.name ?? `Token #${nft.tokenId}`}
           </div>
 
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-3 flex gap-2">
             <button
-              className="rounded-xl border px-3 py-2 text-xs font-semibold"
               onClick={() => setSendOpen(true)}
+              className="
+                flex-1 rounded-full
+                bg-neutral-900 text-white
+                px-3 py-2 text-xs font-semibold
+                active:scale-[0.98] transition
+              "
             >
               Send
             </button>
 
             <button
-              className="rounded-xl border px-3 py-2 text-xs font-semibold"
               onClick={share}
+              className="
+                flex-1 rounded-full
+                border border-neutral-300
+                bg-white/70
+                px-3 py-2 text-xs font-semibold
+                active:scale-[0.98] transition
+              "
             >
               Share
             </button>
@@ -160,14 +143,13 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
     )
   }
 
-  // ------- CARDS VARIANT (your current layout) -------
+  /* ---------------- CARDS VARIANT ---------------- */
   return (
-    <div className="rounded-3xl border overflow-hidden bg-white">
+    <div className="rounded-3xl border bg-white/70 backdrop-blur overflow-hidden shadow-sm">
       <button className="block w-full" onClick={() => openUrl(osUrl)}>
         <div className="px-2 pt-2">
-          <div className="rounded-2xl border overflow-hidden bg-neutral-50">
+          <div className="rounded-3xl overflow-hidden bg-neutral-50">
             {img ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={img} alt={nft.name ?? `#${nft.tokenId}`} className="w-full h-auto block" />
             ) : (
               <div className="w-full aspect-square flex items-center justify-center text-sm text-neutral-400">
@@ -178,21 +160,37 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
         </div>
       </button>
 
-      <div className="px-4 py-3">
-        <div className="text-sm font-semibold truncate">{nft.name ?? `Token #${nft.tokenId}`}</div>
+      <div className="px-4 py-4">
+        <div className="text-sm font-semibold truncate">
+          {nft.name ?? `Token #${nft.tokenId}`}
+        </div>
         <div className="text-xs text-neutral-500 truncate">
           {nft.contractAddress} • {nft.tokenStandard ?? 'Unknown'}
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-4 flex gap-3">
           <button
-            className="rounded-2xl border px-4 py-3 text-sm font-semibold"
             onClick={() => setSendOpen(true)}
+            className="
+              flex-1 rounded-full
+              bg-neutral-900 text-white
+              px-4 py-3 text-sm font-semibold
+              active:scale-[0.98] transition
+            "
           >
             Send
           </button>
 
-          <button className="rounded-2xl border px-4 py-3 text-sm font-semibold" onClick={share}>
+          <button
+            onClick={share}
+            className="
+              flex-1 rounded-full
+              border border-neutral-300
+              bg-white/70
+              px-4 py-3 text-sm font-semibold
+              active:scale-[0.98] transition
+            "
+          >
             Share
           </button>
         </div>
