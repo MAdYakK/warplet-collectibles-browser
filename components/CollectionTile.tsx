@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 
 type CollectionSummary = {
@@ -10,50 +12,38 @@ type CollectionSummary = {
 
 export default function CollectionTile({ c }: { c: CollectionSummary }) {
   return (
-    <Link
-      href={`/collection/${c.chain}/${c.contractAddress}`}
-      className="
-        group
-        block
-        rounded-3xl
-        border
-        bg-white/70
-        backdrop-blur
-        overflow-hidden
-        active:scale-[0.99]
-        transition
-        shadow-sm
-      "
-    >
-      <div className="p-3">
-        <div className="rounded-3xl overflow-hidden border bg-neutral-50">
-          {c.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={c.image}
-              alt={c.name}
-              className="w-full aspect-square object-cover block"
-              loading="lazy"
-            />
-          ) : (
-            <div className="w-full aspect-square flex items-center justify-center text-xs text-neutral-400">
-              No image
-            </div>
-          )}
-        </div>
-
-        <div className="mt-3 min-w-0">
-          <div className="text-sm font-semibold truncate">{c.name}</div>
-          <div className="mt-1 text-xs text-neutral-600">
-            {c.tokenCount} item{c.tokenCount === 1 ? '' : 's'}
+    <div className="rounded-3xl border border-white/10 bg-transparent overflow-hidden">
+      {/* Image is the only link */}
+      <Link
+        href={`/collection/${c.chain}/${c.contractAddress}`}
+        className="block active:scale-[0.99] transition"
+      >
+        <div className="p-3">
+          <div className="rounded-3xl overflow-hidden border border-white/10 bg-white/5">
+            {c.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={c.image}
+                alt={c.name}
+                className="w-full aspect-square object-cover block"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full aspect-square flex items-center justify-center text-xs text-white/50">
+                No image
+              </div>
+            )}
           </div>
         </div>
+      </Link>
 
-        <div className="mt-3 flex items-center justify-between text-[11px] text-neutral-500">
-          <span className="uppercase tracking-wide">{c.chain}</span>
-          <span className="opacity-0 group-hover:opacity-100 transition">Open →</span>
+      {/* Transparent info area */}
+      <div className="px-4 pb-4">
+        <div className="text-sm font-semibold truncate text-white">{c.name}</div>
+        <div className="mt-1 text-xs text-white/70">
+          {c.tokenCount} item{c.tokenCount === 1 ? '' : 's'}
         </div>
       </div>
-    </Link>
+    </div>
   )
 }

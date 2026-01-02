@@ -6,8 +6,6 @@ import { useAccount } from 'wagmi'
 import ConnectBar from '../components/ConnectBar'
 import CollectionTile from '../components/CollectionTile'
 
-type ChainKey = 'base' | 'ethereum'
-
 type CollectionSummary = {
   chain: string
   contractAddress: string
@@ -16,9 +14,23 @@ type CollectionSummary = {
   image?: string
 }
 
+// Major EVM chains (Moralis supports many; we’ll ignore any that error)
+const CHAINS: string[] = [
+  'ethereum',
+  'base',
+  'polygon',
+  'optimism',
+  'arbitrum',
+  'avalanche',
+  'bsc',
+]
+
+const FEATURED_MINIAPP_URL =
+  'https://farcaster.xyz/miniapps/2vgEwTqkDV2n/crytpodickpunks-mint'
+
 const BANNER_MESSAGES = [
   'WARPLET COLLECTIBLES • BROWSE YOUR NFTs • SHARE TO FARCASTER',
-  'YOUR WALLET, VISUALIZED • BASE + ETHEREUM',
+  'YOUR WALLET, VISUALIZED • MAJOR EVM CHAINS',
   'COLLECT • SEND • SHARE • FLEX',
   'NFTS SHOULD BE FUN TO BROWSE',
   'ONCHAIN CULTURE • IN YOUR POCKET',
@@ -26,17 +38,32 @@ const BANNER_MESSAGES = [
   'MINTED ENERGY ONLY • NO COPE',
 ]
 
+function isFarcasterMiniApp(): boolean {
+  if (typeof window === 'undefined') return false
+  return Boolean((window as any).farcaster)
+}
+
+async function openUrl(url: string) {
+  if (typeof window === 'undefined') return
+  if (isFarcasterMiniApp()) {
+    const { sdk } = await import('@farcaster/miniapp-sdk')
+    await sdk.actions.openUrl(url)
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+}
+
 function Marquee({ text }: { text: string }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border bg-white/70 backdrop-blur">
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white/90 to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white/90 to-transparent" />
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur">
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[#1b0736] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[#1b0736] to-transparent" />
 
       <div className="py-2">
         <div className="whitespace-nowrap will-change-transform animate-[marquee_18s_linear_infinite]">
-          <span className="mx-4 text-xs font-semibold tracking-wide text-neutral-800">{text}</span>
-          <span className="mx-4 text-xs font-semibold tracking-wide text-neutral-800">{text}</span>
-          <span className="mx-4 text-xs font-semibold tracking-wide text-neutral-800">{text}</span>
+          <span className="mx-4 text-xs font-semibold tracking-wide text-white/90">{text}</span>
+          <span className="mx-4 text-xs font-semibold tracking-wide text-white/90">{text}</span>
+          <span className="mx-4 text-xs font-semibold tracking-wide text-white/90">{text}</span>
         </div>
       </div>
     </div>
@@ -45,12 +72,11 @@ function Marquee({ text }: { text: string }) {
 
 export default function HomeClient() {
   const { isConnected, address } = useAccount()
-  const [chain, setChain] = useState<ChainKey>('base')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [collections, setCollections] = useState<CollectionSummary[]>([])
 
-  // ✅ Random banner once per page load
+  // Random banner once per page load
   const bannerText = useMemo(() => {
     return BANNER_MESSAGES[Math.floor(Math.random() * BANNER_MESSAGES.length)]
   }, [])
@@ -58,19 +84,35 @@ export default function HomeClient() {
   useEffect(() => {
     const run = async () => {
       if (!isConnected || !address) return
+
       setLoading(true)
       setErr(null)
 
       try {
-        const res = await fetch(`/api/nfts/collections?address=${address}&chain=${chain}`, {
-          cache: 'no-store',
-        })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json?.error || 'Failed to load collections')
+        const results = await Promise.all(
+          CHAINS.map(async (chain) => {
+            try {
+              const res = await fetch(
+                `/api/nfts/collections?address=${address}&chain=${chain}`,
+                { cache: 'no-store' }
+              )
+              const json = await res.json()
+              if (!res.ok) return []
+              const cols = (json.collections ?? []) as CollectionSummary[]
+              // Ensure chain is set (some APIs might omit)
+              return cols.map((c) => ({ ...c, chain: (c.chain ?? chain) as string }))
+            } catch {
+              return []
+            }
+          })
+        )
 
-        const cols = (json.collections ?? []) as CollectionSummary[]
-        cols.sort((a, b) => (b.tokenCount ?? 0) - (a.tokenCount ?? 0))
-        setCollections(cols)
+        const merged = results.flat()
+
+        // Sort: most items first
+        merged.sort((a, b) => (b.tokenCount ?? 0) - (a.tokenCount ?? 0))
+
+        setCollections(merged)
       } catch (e: any) {
         setErr(e?.message ?? 'Error')
       } finally {
@@ -79,7 +121,7 @@ export default function HomeClient() {
     }
 
     run()
-  }, [isConnected, address, chain])
+  }, [isConnected, address])
 
   const emptyState = useMemo(() => {
     if (!isConnected) return 'Connect your wallet to view collectibles.'
@@ -91,72 +133,60 @@ export default function HomeClient() {
 
   return (
     <main
-      className="min-h-screen bg-neutral-50 text-neutral-900"
-      // Later you can switch to an image:
-      // style={{ backgroundImage: 'url(/bg.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+      className="min-h-screen text-white"
+      style={{ backgroundColor: '#1b0736' }} // dark purple base
     >
       <div className="mx-auto max-w-md px-3 pb-24">
         {/* Sticky banner always visible */}
-        <div className="sticky top-0 z-50 pt-3 pb-2 bg-neutral-50">
+        <div className="sticky top-0 z-50 pt-3 pb-2" style={{ backgroundColor: '#1b0736' }}>
           <Marquee text={bannerText} />
         </div>
 
         {/* Featured area (scrolls away) */}
         <section className="mt-2">
-          <div className="rounded-3xl border bg-white/70 backdrop-blur p-3">
+          <div className="rounded-3xl border border-white/10 bg-transparent p-3">
             <ConnectBar />
 
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                className={[
-                  'rounded-full px-4 py-2 text-xs font-semibold border transition',
-                  chain === 'base'
-                    ? 'bg-neutral-900 text-white border-neutral-900'
-                    : 'bg-white/60 text-neutral-900 border-neutral-200',
-                ].join(' ')}
-                onClick={() => setChain('base')}
-              >
-                Base
-              </button>
-
-              <button
-                className={[
-                  'rounded-full px-4 py-2 text-xs font-semibold border transition',
-                  chain === 'ethereum'
-                    ? 'bg-neutral-900 text-white border-neutral-900'
-                    : 'bg-white/60 text-neutral-900 border-neutral-200',
-                ].join(' ')}
-                onClick={() => setChain('ethereum')}
-              >
-                Ethereum
-              </button>
-
-              <div className="ml-auto text-xs text-neutral-500">
-                {isConnected ? 'Connected' : 'Not connected'}
-              </div>
-            </div>
-
+            {/* Featured miniapp promo */}
             <div className="mt-3">
-              <div
-                className="rounded-3xl border bg-gradient-to-b from-white/60 to-white/20 p-4"
-                style={{ height: '25vh', minHeight: 140 }}
-              >
-                <div className="text-sm font-semibold">Featured</div>
-                <div className="mt-1 text-xs text-neutral-600">
-                  Later we can turn this into curated collections, a carousel, or a “continue browsing” row.
-                </div>
+              <button
+  type="button"
+  onClick={() => openUrl(FEATURED_MINIAPP_URL)}
+  className="
+    w-full overflow-hidden rounded-3xl border border-white/10
+    bg-transparent
+    active:scale-[0.99] transition
+    text-left
+  "
+  style={{ height: '25vh', minHeight: 160 }}
+>
+  <div
+    className="relative h-full w-full"
+    style={{
+      backgroundImage: "url('/mintbanner.png')",
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    }}
+  >
+    {/* Dark overlay for readability */}
+    <div className="absolute inset-0 bg-black/30" />
 
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border bg-white/50 p-3">
-                    <div className="text-xs font-semibold">Spotlight</div>
-                    <div className="mt-1 text-[11px] text-neutral-600">Drop or collection highlight</div>
-                  </div>
-                  <div className="rounded-2xl border bg-white/50 p-3">
-                    <div className="text-xs font-semibold">What’s new</div>
-                    <div className="mt-1 text-[11px] text-neutral-600">Updates / announcements</div>
-                  </div>
-                </div>
-              </div>
+    {/* Text overlay */}
+    <div className="relative h-full w-full p-5 flex flex-col justify-end">
+      <div className="text-sm font-semibold text-white/90">
+        Featured Miniapp
+      </div>
+      <div className="mt-1 text-lg font-extrabold leading-tight text-white">
+        CryptoDickPunks Mint
+      </div>
+      <div className="mt-1 text-xs text-white/80">
+        Tap to open in Warpcast →
+      </div>
+    </div>
+  </div>
+</button>
+
+
             </div>
           </div>
         </section>
@@ -164,7 +194,7 @@ export default function HomeClient() {
         {/* Collections grid (always 2 columns) */}
         <section className="mt-4">
           {emptyState ? (
-            <div className="rounded-3xl border bg-white/70 backdrop-blur p-4 text-sm text-neutral-700">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
               {emptyState}
             </div>
           ) : (
@@ -172,7 +202,13 @@ export default function HomeClient() {
               {collections.map((c) => (
                 <CollectionTile
                   key={`${c.chain}:${c.contractAddress}`}
-                  c={{ ...c, name: c.name ?? '', tokenCount: c.tokenCount ?? 0 }}
+                  c={{
+                    ...c,
+                    name: c.name ?? '',
+                    tokenCount: c.tokenCount ?? 0,
+                    // chain passed through for routing
+                    chain: (c.chain ?? '').toLowerCase(),
+                  }}
                 />
               ))}
             </div>

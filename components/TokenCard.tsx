@@ -70,12 +70,17 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
     }
   }
 
-  /* ---------------- GRID VARIANT ---------------- */
+  // Shared container styles (transparent / purple-friendly)
+  const shell =
+    'rounded-3xl border border-white/10 bg-transparent overflow-hidden'
+  const imageWrap =
+    'rounded-3xl overflow-hidden border border-white/10 bg-white/5'
+
   if (variant === 'grid') {
     return (
-      <div className="rounded-3xl border bg-white/70 backdrop-blur overflow-hidden shadow-sm">
+      <div className={shell}>
         <button className="block w-full" onClick={() => openUrl(osUrl)}>
-          <div className="rounded-3xl overflow-hidden bg-neutral-50">
+          <div className={imageWrap}>
             {img ? (
               <img
                 src={img}
@@ -84,7 +89,7 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
                 loading="lazy"
               />
             ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-xs text-neutral-400">
+              <div className="w-full aspect-square flex items-center justify-center text-xs text-white/50">
                 No image
               </div>
             )}
@@ -92,7 +97,7 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
         </button>
 
         <div className="px-3 py-3">
-          <div className="text-xs font-semibold truncate">
+          <div className="text-xs font-semibold truncate text-white">
             {nft.name ?? `Token #${nft.tokenId}`}
           </div>
 
@@ -101,7 +106,7 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
               onClick={() => setSendOpen(true)}
               className="
                 flex-1 rounded-full
-                bg-neutral-900 text-white
+                bg-white text-[#1b0736]
                 px-3 py-2 text-xs font-semibold
                 active:scale-[0.98] transition
               "
@@ -113,9 +118,10 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
               onClick={share}
               className="
                 flex-1 rounded-full
-                border border-neutral-300
-                bg-white/70
+                border border-white/20
+                bg-white/5
                 px-3 py-2 text-xs font-semibold
+                text-white
                 active:scale-[0.98] transition
               "
             >
@@ -143,16 +149,15 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
     )
   }
 
-  /* ---------------- CARDS VARIANT ---------------- */
   return (
-    <div className="rounded-3xl border bg-white/70 backdrop-blur overflow-hidden shadow-sm">
+    <div className={shell}>
       <button className="block w-full" onClick={() => openUrl(osUrl)}>
         <div className="px-2 pt-2">
-          <div className="rounded-3xl overflow-hidden bg-neutral-50">
+          <div className={imageWrap}>
             {img ? (
               <img src={img} alt={nft.name ?? `#${nft.tokenId}`} className="w-full h-auto block" />
             ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-sm text-neutral-400">
+              <div className="w-full aspect-square flex items-center justify-center text-sm text-white/50">
                 No image
               </div>
             )}
@@ -161,10 +166,10 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
       </button>
 
       <div className="px-4 py-4">
-        <div className="text-sm font-semibold truncate">
+        <div className="text-sm font-semibold truncate text-white">
           {nft.name ?? `Token #${nft.tokenId}`}
         </div>
-        <div className="text-xs text-neutral-500 truncate">
+        <div className="text-xs text-white/70 truncate">
           {nft.contractAddress} • {nft.tokenStandard ?? 'Unknown'}
         </div>
 
@@ -173,7 +178,7 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
             onClick={() => setSendOpen(true)}
             className="
               flex-1 rounded-full
-              bg-neutral-900 text-white
+              bg-white text-[#1b0736]
               px-4 py-3 text-sm font-semibold
               active:scale-[0.98] transition
             "
@@ -185,9 +190,10 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
             onClick={share}
             className="
               flex-1 rounded-full
-              border border-neutral-300
-              bg-white/70
+              border border-white/20
+              bg-white/5
               px-4 py-3 text-sm font-semibold
+              text-white
               active:scale-[0.98] transition
             "
           >

@@ -5,27 +5,17 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import TokenCard from '../../../../components/TokenCard'
-import type { ChainKey, NftItem } from '../../../../lib/types'
+import type { NftItem } from '../../../../lib/types'
 import useViewMode from '../../../../lib/useViewMode'
 
 type RouteParams = { chain?: string; contract?: string }
-
-function normalizeChain(chain?: string): ChainKey {
-  const c = (chain || '').toLowerCase()
-  if (c === 'ethereum' || c === 'eth' || c === 'mainnet') return 'ethereum'
-  return 'base'
-}
 
 export default function CollectionClient() {
   const params = useParams<RouteParams>()
   const { address, isConnected } = useAccount()
 
-  const chain = useMemo(() => normalizeChain(params?.chain), [params?.chain])
-
-  const contract = useMemo(() => {
-    const raw = params?.contract
-    return typeof raw === 'string' ? raw.toLowerCase() : ''
-  }, [params?.contract])
+  const chain = useMemo(() => String(params?.chain ?? '').toLowerCase(), [params?.chain])
+  const contract = useMemo(() => String(params?.contract ?? '').toLowerCase(), [params?.contract])
 
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -71,57 +61,53 @@ export default function CollectionClient() {
   }, [contract, isConnected, loading, err, nfts.length])
 
   return (
-    <main className="mx-auto max-w-md bg-neutral-50 min-h-screen">
-      <div className="sticky top-0 z-40 bg-neutral-50/90 backdrop-blur border-b">
+    <main className="mx-auto max-w-md min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
+      <div
+        className="sticky top-0 z-40 backdrop-blur border-b border-white/10"
+        style={{ backgroundColor: 'rgba(27, 7, 54, 0.85)' }}
+      >
         <div className="p-3 flex items-center justify-between gap-3">
-          {/* ✅ Back button to real home route */}
-          <Link
-            href="/"
-            className="
-              rounded-full
-              border
-              px-4 py-2
-              text-xs font-semibold
-              bg-white/70
-              backdrop-blur
-              border-neutral-200
-              active:scale-[0.98]
-              transition
-            "
-          >
-            Back
-          </Link>
+          {/* Unified pill group: Back + Cards/Grid */}
+          <div className="rounded-full border border-white/10 bg-white/5 p-1 flex items-center gap-1">
+            <Link
+              href="/"
+              className="
+                rounded-full px-3 py-2 text-xs font-semibold
+                text-white/90
+                active:scale-[0.98] transition
+              "
+            >
+              Back
+            </Link>
 
-          <div className="flex items-center gap-2">
-            <div className="rounded-full border p-1 flex items-center gap-1 bg-white/70 backdrop-blur border-neutral-200">
-              <button
-                type="button"
-                onClick={() => setMode('cards')}
-                className={[
-                  'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]',
-                  mode === 'cards' ? 'bg-neutral-900 text-white' : 'text-neutral-900',
-                ].join(' ')}
-                aria-pressed={mode === 'cards'}
-              >
-                Cards
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('grid')}
-                className={[
-                  'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]',
-                  mode === 'grid' ? 'bg-neutral-900 text-white' : 'text-neutral-900',
-                ].join(' ')}
-                aria-pressed={mode === 'grid'}
-              >
-                Grid
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setMode('cards')}
+              className={[
+                'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]',
+                mode === 'cards' ? 'bg-white text-[#1b0736]' : 'text-white/90',
+              ].join(' ')}
+              aria-pressed={mode === 'cards'}
+            >
+              Cards
+            </button>
 
-            <div className="min-w-0 text-right">
-              <div className="text-sm font-semibold truncate">{contract || 'Collection'}</div>
-              <div className="text-xs text-neutral-600">{statusText}</div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setMode('grid')}
+              className={[
+                'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]',
+                mode === 'grid' ? 'bg-white text-[#1b0736]' : 'text-white/90',
+              ].join(' ')}
+              aria-pressed={mode === 'grid'}
+            >
+              Grid
+            </button>
+          </div>
+
+          <div className="min-w-0 text-right">
+            <div className="text-sm font-semibold truncate text-white">{contract || 'Collection'}</div>
+            <div className="text-xs text-white/70">{statusText}</div>
           </div>
         </div>
       </div>
