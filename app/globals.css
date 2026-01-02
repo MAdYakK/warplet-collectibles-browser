@@ -9,6 +9,16 @@ html, body {
 
 body {
   margin: 0;
-  background: white;
+  background: #fafafa;
   color: black;
+}
+
+/* Marquee animation for home banner */
+@keyframes marquee {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(-33.333%);
+  }
 }

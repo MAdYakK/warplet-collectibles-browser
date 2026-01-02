@@ -31,6 +31,8 @@ export default function CollectionClient() {
   const [err, setErr] = useState<string | null>(null)
   const [nfts, setNfts] = useState<NftItem[]>([])
 
+  
+
   const { mode, setMode } = useViewMode({
     storageKey: 'warplet:collectionViewMode',
     defaultMode: 'cards',
@@ -71,21 +73,35 @@ export default function CollectionClient() {
   }, [contract, isConnected, loading, err, nfts.length])
 
   return (
-    <main className="mx-auto max-w-md">
-      <div className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b">
+    <main className="mx-auto max-w-md bg-neutral-50 min-h-screen">
+      <div className="sticky top-0 z-40 bg-neutral-50/90 backdrop-blur border-b">
         <div className="p-3 flex items-center justify-between gap-3">
-          <Link href="/" className="rounded-xl border px-4 py-2 text-sm font-semibold active:scale-[0.99]">
-            HOME
+          <Link
+            href="/collection"
+            className="
+              rounded-full
+              border
+              px-4 py-2
+              text-xs font-semibold
+              bg-white/60
+              backdrop-blur
+              border-neutral-200
+              active:scale-[0.99]
+              transition
+            "
+          >
+            Home
           </Link>
 
           <div className="flex items-center gap-2">
-            <div className="rounded-xl border p-1 flex items-center gap-1">
+            <div className="rounded-full border p-1 flex items-center gap-1 bg-white/60 backdrop-blur border-neutral-200">
               <button
                 type="button"
                 onClick={() => setMode('cards')}
-                className={`rounded-lg px-3 py-2 text-xs font-semibold active:scale-[0.99] ${
-                  mode === 'cards' ? 'bg-neutral-100' : ''
-                }`}
+                className={[
+                  'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.99]',
+                  mode === 'cards' ? 'bg-neutral-900 text-white' : 'text-neutral-900',
+                ].join(' ')}
                 aria-pressed={mode === 'cards'}
               >
                 Cards
@@ -93,9 +109,10 @@ export default function CollectionClient() {
               <button
                 type="button"
                 onClick={() => setMode('grid')}
-                className={`rounded-lg px-3 py-2 text-xs font-semibold active:scale-[0.99] ${
-                  mode === 'grid' ? 'bg-neutral-100' : ''
-                }`}
+                className={[
+                  'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.99]',
+                  mode === 'grid' ? 'bg-neutral-900 text-white' : 'text-neutral-900',
+                ].join(' ')}
                 aria-pressed={mode === 'grid'}
               >
                 Grid
@@ -104,7 +121,7 @@ export default function CollectionClient() {
 
             <div className="min-w-0 text-right">
               <div className="text-sm font-semibold truncate">{contract || 'Collection'}</div>
-              <div className="text-xs text-neutral-500">{statusText}</div>
+              <div className="text-xs text-neutral-600">{statusText}</div>
             </div>
           </div>
         </div>
@@ -112,23 +129,15 @@ export default function CollectionClient() {
 
       <div className="p-3 pb-24">
         {mode === 'grid' ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             {nfts.map((nft) => (
-              <TokenCard
-                key={`${nft.contractAddress}:${nft.tokenId}`}
-                nft={nft}
-                variant="grid"
-              />
+              <TokenCard key={`${nft.contractAddress}:${nft.tokenId}`} nft={nft} variant="grid" />
             ))}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {nfts.map((nft) => (
-              <TokenCard
-                key={`${nft.contractAddress}:${nft.tokenId}`}
-                nft={nft}
-                variant="cards"
-              />
+              <TokenCard key={`${nft.contractAddress}:${nft.tokenId}`} nft={nft} variant="cards" />
             ))}
           </div>
         )}
