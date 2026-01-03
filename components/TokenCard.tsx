@@ -143,21 +143,24 @@ export default function TokenCard({
           <button
             className={[buttonBase, disableActions ? disabledBtn : enabledBtn].join(' ')}
             onClick={() => {
-              if (disableActions) return
-              // capture where this card is on screen so modal centers over it
-              const rect = cardRef.current?.getBoundingClientRect()
-              if (rect) {
-                setAnchorRect({
-                  top: rect.top,
-                  left: rect.left,
-                  width: rect.width,
-                  height: rect.height,
-                })
-              } else {
-                setAnchorRect(null)
-              }
-              setSendOpen(true)
-            }}
+  if (disableActions) return
+
+  // open first (so even if rect fails, modal still appears centered)
+  setSendOpen(true)
+
+  const rect = cardRef.current?.getBoundingClientRect()
+  if (rect) {
+    setAnchorRect({
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+    })
+  } else {
+    setAnchorRect(null)
+  }
+}}
+
             disabled={disableActions}
             type="button"
           >

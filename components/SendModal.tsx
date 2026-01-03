@@ -20,18 +20,10 @@ export default function SendModal({
   maxAmount?: number
   anchorRect?: AnchorRect | null
 }) {
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null)
-
   const [to, setTo] = useState('')
   const [amountStr, setAmountStr] = useState('1')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-
-  // Mount portal target safely
-  useEffect(() => {
-    if (typeof document === 'undefined') return
-    setPortalTarget(document.body)
-  }, [])
 
   const max = Math.max(1, Math.floor(Number(maxAmount || 1)))
 
@@ -53,33 +45,34 @@ export default function SendModal({
 
   const canSubmit = canSubmitAddr && !busy && amount >= 1 && amount <= max
 
-  // Position modal centered over the clicked card (anchorRect), clamped to viewport
   const modalPos = useMemo(() => {
     if (!anchorRect || typeof window === 'undefined') return null
     const cx = anchorRect.left + anchorRect.width / 2
     const cy = anchorRect.top + anchorRect.height / 2
 
-    // clamp a bit so it doesn't render offscreen
     const vw = window.innerWidth
     const vh = window.innerHeight
-    const clampedX = Math.max(24, Math.min(vw - 24, cx))
-    const clampedY = Math.max(24, Math.min(vh - 24, cy))
-
-    return { left: clampedX, top: clampedY }
+    const x = Math.max(24, Math.min(vw - 24, cx))
+    const y = Math.max(24, Math.min(vh - 24, cy))
+    return { left: x, top: y }
   }, [anchorRect])
 
-  if (!open || !portalTarget) return null
+  if (!open) return null
+  if (typeof document === 'undefined') return null
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999]">
-      {/* backdrop: click closes */}
+    <div className="fixed inset-0 z-[2147483647]">
+      {/* backdrop */}
       <div
         className="absolute inset-0 bg-black/70"
-        onClick={onClose}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          onClose()
+        }}
         aria-hidden="true"
       />
 
-      {/* container: centers over anchor, else centers screen */}
+      {/* centered over card (or screen center fallback) */}
       <div
         className="absolute"
         style={
@@ -88,7 +81,6 @@ export default function SendModal({
             : { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }
         }
       >
-        {/* modal: stop click from closing */}
         <div
           className="
             relative w-[92vw] max-w-md
@@ -97,6 +89,7 @@ export default function SendModal({
             shadow-[0_25px_80px_rgba(0,0,0,0.65)]
             overflow-hidden
           "
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -120,7 +113,6 @@ export default function SendModal({
               />
             </div>
 
-            {/* Quantity selector only if > 1 */}
             {max > 1 ? (
               <div className="rounded-2xl border border-white/15 bg-white/10 p-3">
                 <div className="flex items-center justify-between gap-3">
@@ -149,7 +141,7 @@ export default function SendModal({
                       const v = e.target.value.replace(/[^\d]/g, '')
                       setAmountStr(v || '1')
                     }}
-                    className="flex-1 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white outline-none placeholder:text-white/40"
+                    className="flex-1 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white outline-none"
                     style={{ color: '#ffffff', caretColor: '#ffffff' }}
                   />
                 </div>
@@ -206,6 +198,6 @@ export default function SendModal({
         </div>
       </div>
     </div>,
-    portalTarget
+    document.body
   )
 }
