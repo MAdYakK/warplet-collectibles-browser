@@ -109,7 +109,7 @@ export default function CollectionClient() {
   const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
   const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
 
-  // ✅ Global modal state (cannot be eaten by virtualization)
+  // Global modal state (cannot be eaten by virtualization)
   const [sendOpen, setSendOpen] = useState(false)
   const [sendNft, setSendNft] = useState<NftItem | null>(null)
   const [sendAnchorRect, setSendAnchorRect] = useState<AnchorRect | null>(null)
@@ -259,7 +259,7 @@ export default function CollectionClient() {
         )}
       </div>
 
-      {/* ✅ One modal, outside virtualized content */}
+      {/* One modal, outside virtualized content */}
       <SendModal
         open={sendOpen}
         onClose={() => setSendOpen(false)}
@@ -287,11 +287,6 @@ export default function CollectionClient() {
           }
         }}
       />
-
-      {/* ✅ DEBUG badge: if this changes when you click Send, openSend is wired */}
-      <div className="fixed bottom-2 left-2 z-[2147483647] text-[10px] text-white/90 bg-black/50 px-2 py-1 rounded-full pointer-events-none">
-        sendOpen: {String(sendOpen)} | sendNft: {sendNft ? 'yes' : 'no'}
-      </div>
     </main>
   )
 }
