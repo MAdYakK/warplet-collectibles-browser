@@ -6,6 +6,23 @@ import { erc721Abi } from 'viem'
 import type { NftItem } from '../lib/types'
 import SendModal from './SendModal'
 
+// Minimal ERC-1155 ABI for safeTransferFrom
+const erc1155Abi = [
+  {
+    type: 'function',
+    name: 'safeTransferFrom',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'id', type: 'uint256' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'data', type: 'bytes' },
+    ],
+    outputs: [],
+  },
+] as const
+
 function isFarcasterMiniApp(): boolean {
   if (typeof window === 'undefined') return false
   return Boolean((window as any).farcaster)
@@ -73,10 +90,15 @@ export default function TokenCard({
     }
   }
 
+  // Determine quantity capability (ERC-1155 only)
+  const tokenStd = String((nft as any).tokenStandard ?? '').toLowerCase()
+  const is1155 = tokenStd.includes('1155')
+  const rawAmount = (nft as any).amount ?? (nft as any).balance ?? 1
+  const maxAmount = Math.max(1, Number(rawAmount) ? Number(rawAmount) : 1)
+
   const buttonBase = 'rounded-full px-4 py-2 text-xs font-semibold transition active:scale-[0.98]'
   const enabledBtn = 'bg-white text-[#1b0736]'
   const disabledBtn = 'bg-white/25 text-white/60 cursor-not-allowed'
-
   const gapClass = variant === 'grid' ? 'space-y-2' : 'space-y-3'
 
   return (
@@ -87,14 +109,7 @@ export default function TokenCard({
         className="block w-full text-left active:scale-[0.99] transition"
         onClick={() => openUrl(osUrl)}
       >
-        <div
-          className="
-            rounded-3xl overflow-hidden
-            border border-white/20
-            bg-[#2a0c52]
-            shadow-[0_14px_45px_rgba(0,0,0,0.45)]
-          "
-        >
+        <div className="rounded-3xl overflow-hidden border border-white/20 bg-[#2a0c52] shadow-[0_14px_45px_rgba(0,0,0,0.45)]">
           {img && !imgFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -113,16 +128,8 @@ export default function TokenCard({
         </div>
       </button>
 
-      {/* INFO + ACTIONS BUBBLE (separate) */}
-      <div
-        className="
-          rounded-2xl
-          border border-white/20
-          bg-[#6d28d9]
-          px-3 py-3
-          shadow-[0_10px_35px_rgba(0,0,0,0.35)]
-        "
-      >
+      {/* INFO + ACTIONS BUBBLE */}
+      <div className="rounded-2xl border border-white/20 bg-[#6d28d9] px-3 py-3 shadow-[0_10px_35px_rgba(0,0,0,0.35)]">
         <div className="text-sm font-semibold text-white truncate">
           {nft.name ?? `Token #${nft.tokenId}`}
         </div>
@@ -150,15 +157,27 @@ export default function TokenCard({
         open={sendOpen}
         onClose={() => setSendOpen(false)}
         title={`Send Token #${nft.tokenId}`}
-        onConfirm={async (to) => {
+        maxAmount={is1155 ? maxAmount : 1}
+        onConfirm={async (to, amount) => {
           if (!address) throw new Error('Wallet not connected')
 
-          await writeContractAsync({
-            address: nft.contractAddress as `0x${string}`,
-            abi: erc721Abi,
-            functionName: 'safeTransferFrom',
-            args: [address, to, BigInt(nft.tokenId)],
-          })
+          if (is1155) {
+            // ERC-1155: safeTransferFrom(from, to, id, amount, data)
+            await writeContractAsync({
+              address: nft.contractAddress as `0x${string}`,
+              abi: erc1155Abi,
+              functionName: 'safeTransferFrom',
+              args: [address, to, BigInt(nft.tokenId), BigInt(amount), '0x'],
+            })
+          } else {
+            // ERC-721: safeTransferFrom(from, to, tokenId)
+            await writeContractAsync({
+              address: nft.contractAddress as `0x${string}`,
+              abi: erc721Abi,
+              functionName: 'safeTransferFrom',
+              args: [address, to, BigInt(nft.tokenId)],
+            })
+          }
         }}
       />
     </div>
