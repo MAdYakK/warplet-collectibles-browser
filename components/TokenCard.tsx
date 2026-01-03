@@ -32,9 +32,10 @@ const SHARE_TEXT =
 type Props = {
   nft: NftItem
   variant?: 'cards' | 'grid'
+  disableActions?: boolean
 }
 
-export default function TokenCard({ nft, variant = 'cards' }: Props) {
+export default function TokenCard({ nft, variant = 'cards', disableActions = false }: Props) {
   const { address } = useAccount()
   const { writeContractAsync } = useWriteContract()
   const [sendOpen, setSendOpen] = useState(false)
@@ -56,6 +57,8 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
   }
 
   const share = async () => {
+    if (disableActions) return
+
     const appUrl = getMiniAppUrl()
 
     if (isFarcasterMiniApp()) {
@@ -70,11 +73,23 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
     }
   }
 
-  // Shared container styles (transparent / purple-friendly)
-  const shell =
-    'rounded-3xl border border-white/10 bg-transparent overflow-hidden'
-  const imageWrap =
-    'rounded-3xl overflow-hidden border border-white/10 bg-white/5'
+  const shell = 'rounded-3xl border border-white/10 bg-transparent overflow-hidden'
+  const imageWrap = 'rounded-3xl overflow-hidden border border-white/10 bg-white/5'
+
+  const primaryBtnEnabled =
+    'bg-white text-[#1b0736] active:scale-[0.98] transition'
+  const primaryBtnDisabled =
+    'bg-white/20 text-white/60 cursor-not-allowed'
+
+  const secondaryBtnEnabled =
+    'border border-white/20 bg-white/5 text-white active:scale-[0.98] transition'
+  const secondaryBtnDisabled =
+    'border border-white/10 bg-white/5 text-white/50 cursor-not-allowed'
+
+  const onSend = () => {
+    if (disableActions) return
+    setSendOpen(true)
+  }
 
   if (variant === 'grid') {
     return (
@@ -82,6 +97,7 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
         <button className="block w-full" onClick={() => openUrl(osUrl)}>
           <div className={imageWrap}>
             {img ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={img}
                 alt={nft.name ?? `#${nft.tokenId}`}
@@ -89,7 +105,7 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
                 loading="lazy"
               />
             ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-xs text-white/50">
+              <div className="w-full aspect-square flex items-center justify-center text-xs text-white/70">
                 No image
               </div>
             )}
@@ -103,27 +119,25 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
 
           <div className="mt-3 flex gap-2">
             <button
-              onClick={() => setSendOpen(true)}
-              className="
-                flex-1 rounded-full
-                bg-white text-[#1b0736]
-                px-3 py-2 text-xs font-semibold
-                active:scale-[0.98] transition
-              "
+              onClick={onSend}
+              disabled={disableActions}
+              className={[
+                'flex-1 rounded-full px-3 py-2 text-xs font-semibold',
+                disableActions ? primaryBtnDisabled : primaryBtnEnabled,
+              ].join(' ')}
+              title={disableActions ? 'Disabled while browsing other wallets' : 'Send'}
             >
               Send
             </button>
 
             <button
               onClick={share}
-              className="
-                flex-1 rounded-full
-                border border-white/20
-                bg-white/5
-                px-3 py-2 text-xs font-semibold
-                text-white
-                active:scale-[0.98] transition
-              "
+              disabled={disableActions}
+              className={[
+                'flex-1 rounded-full px-3 py-2 text-xs font-semibold',
+                disableActions ? secondaryBtnDisabled : secondaryBtnEnabled,
+              ].join(' ')}
+              title={disableActions ? 'Disabled while browsing other wallets' : 'Share'}
             >
               Share
             </button>
@@ -155,9 +169,10 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
         <div className="px-2 pt-2">
           <div className={imageWrap}>
             {img ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={img} alt={nft.name ?? `#${nft.tokenId}`} className="w-full h-auto block" />
             ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-sm text-white/50">
+              <div className="w-full aspect-square flex items-center justify-center text-sm text-white/70">
                 No image
               </div>
             )}
@@ -169,33 +184,31 @@ export default function TokenCard({ nft, variant = 'cards' }: Props) {
         <div className="text-sm font-semibold truncate text-white">
           {nft.name ?? `Token #${nft.tokenId}`}
         </div>
-        <div className="text-xs text-white/70 truncate">
+        <div className="text-xs text-white/80 truncate">
           {nft.contractAddress} • {nft.tokenStandard ?? 'Unknown'}
         </div>
 
         <div className="mt-4 flex gap-3">
           <button
-            onClick={() => setSendOpen(true)}
-            className="
-              flex-1 rounded-full
-              bg-white text-[#1b0736]
-              px-4 py-3 text-sm font-semibold
-              active:scale-[0.98] transition
-            "
+            onClick={onSend}
+            disabled={disableActions}
+            className={[
+              'flex-1 rounded-full px-4 py-3 text-sm font-semibold',
+              disableActions ? primaryBtnDisabled : primaryBtnEnabled,
+            ].join(' ')}
+            title={disableActions ? 'Disabled while browsing other wallets' : 'Send'}
           >
             Send
           </button>
 
           <button
             onClick={share}
-            className="
-              flex-1 rounded-full
-              border border-white/20
-              bg-white/5
-              px-4 py-3 text-sm font-semibold
-              text-white
-              active:scale-[0.98] transition
-            "
+            disabled={disableActions}
+            className={[
+              'flex-1 rounded-full px-4 py-3 text-sm font-semibold',
+              disableActions ? secondaryBtnDisabled : secondaryBtnEnabled,
+            ].join(' ')}
+            title={disableActions ? 'Disabled while browsing other wallets' : 'Share'}
           >
             Share
           </button>

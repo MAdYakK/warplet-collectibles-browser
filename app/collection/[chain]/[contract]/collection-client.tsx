@@ -1,23 +1,33 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import TokenCard from '../../../../components/TokenCard'
 import type { NftItem } from '../../../../lib/types'
 import useViewMode from '../../../../lib/useViewMode'
-import { useRouter } from 'next/navigation'
-
 
 type RouteParams = { chain?: string; contract?: string }
 
+function shortAddr(a: string) {
+  if (!a) return ''
+  return `${a.slice(0, 6)}…${a.slice(-4)}`
+}
+
 export default function CollectionClient() {
-  const params = useParams<RouteParams>()
-  const { address, isConnected } = useAccount()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const params = useParams<RouteParams>()
+  const { address: connectedAddress, isConnected } = useAccount()
+
   const chain = useMemo(() => String(params?.chain ?? '').toLowerCase(), [params?.chain])
   const contract = useMemo(() => String(params?.contract ?? '').toLowerCase(), [params?.contract])
+
+  const browsedAddr = (searchParams?.get('addr') || '').trim().toLowerCase()
+  const targetAddress = (browsedAddr || connectedAddress || '').toLowerCase()
+
+  const disableActions =
+    Boolean(browsedAddr) && Boolean(connectedAddress) && browsedAddr !== connectedAddress?.toLowerCase()
 
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -30,7 +40,7 @@ export default function CollectionClient() {
 
   useEffect(() => {
     const run = async () => {
-      if (!isConnected || !address) return
+      if (!isConnected || !targetAddress) return
       if (!contract) return
 
       setLoading(true)
@@ -38,7 +48,7 @@ export default function CollectionClient() {
 
       try {
         const res = await fetch(
-          `/api/nfts/tokens?address=${address}&chain=${chain}&contract=${contract}`,
+          `/api/nfts/tokens?address=${targetAddress}&chain=${chain}&contract=${contract}`,
           { cache: 'no-store' }
         )
         const json = await res.json()
@@ -52,7 +62,7 @@ export default function CollectionClient() {
     }
 
     run()
-  }, [isConnected, address, chain, contract])
+  }, [isConnected, targetAddress, chain, contract])
 
   const statusText = useMemo(() => {
     if (!contract) return 'Bad route'
@@ -75,15 +85,11 @@ export default function CollectionClient() {
           <div className="rounded-full border border-white/10 bg-white/5 p-1 flex items-center gap-1">
             <button
               type="button"
-              onClick={() => router.push('/')}
-              className={[
-                pillBase,
-                'text-white/90 hover:bg-white/5',
-              ].join(' ')}
+              onClick={() => router.push(browsedAddr ? `/?addr=${encodeURIComponent(browsedAddr)}` : '/')}
+              className={[pillBase, 'text-white/90 hover:bg-white/5'].join(' ')}
             >
               Back
             </button>
-
 
             <button
               type="button"
@@ -111,8 +117,20 @@ export default function CollectionClient() {
           </div>
 
           <div className="min-w-0 text-right">
-            <div className="text-sm font-semibold truncate text-white">{contract || 'Collection'}</div>
-            <div className="text-xs text-white/70">{statusText}</div>
+            <div className="flex items-center justify-end gap-2">
+              {/* Browsing chip */}
+              {disableActions ? (
+                <div className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/90">
+                  Browsing {shortAddr(targetAddress)}
+                </div>
+              ) : null}
+
+              <div className="text-sm font-semibold truncate text-white">
+                {contract || 'Collection'}
+              </div>
+            </div>
+
+            <div className="text-xs text-white/80">{statusText}</div>
           </div>
         </div>
       </div>
@@ -121,13 +139,23 @@ export default function CollectionClient() {
         {mode === 'grid' ? (
           <div className="grid grid-cols-2 gap-4">
             {nfts.map((nft) => (
-              <TokenCard key={`${nft.contractAddress}:${nft.tokenId}`} nft={nft} variant="grid" />
+              <TokenCard
+                key={`${nft.contractAddress}:${nft.tokenId}`}
+                nft={nft}
+                variant="grid"
+                disableActions={disableActions}
+              />
             ))}
           </div>
         ) : (
           <div className="space-y-4">
             {nfts.map((nft) => (
-              <TokenCard key={`${nft.contractAddress}:${nft.tokenId}`} nft={nft} variant="cards" />
+              <TokenCard
+                key={`${nft.contractAddress}:${nft.tokenId}`}
+                nft={nft}
+                variant="cards"
+                disableActions={disableActions}
+              />
             ))}
           </div>
         )}

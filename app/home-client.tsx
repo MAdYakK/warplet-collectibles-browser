@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
+import { useRouter, useSearchParams } from 'next/navigation'
 import ConnectBar from '../components/ConnectBar'
 import CollectionTile from '../components/CollectionTile'
 
@@ -20,12 +21,13 @@ const FEATURED_MINIAPP_URL =
   'https://farcaster.xyz/miniapps/2vgEwTqkDV2n/crytpodickpunks-mint'
 
 const BANNER_MESSAGES = [
-  'WARPLET COLLECTIBLES • BROWSE YOUR NFTs • SHARE TO FARCASTER • ',
-  'YOUR WALLET, VISUALIZED • MAJOR EVM CHAINS • ',
-  'COLLECT • SEND • SHARE • FLEX • ',
+  'WARPLET COLLECTIBLES • BROWSE YOUR NFTs • SHARE TO FARCASTER',
+  'YOUR WALLET, VISUALIZED • MAJOR EVM CHAINS',
+  'COLLECT • SEND • SHARE • FLEX',
   'NFTS SHOULD BE FUN TO BROWSE',
-  'VIEW YOUR COLLECTIONS YOUR WAY',
-
+  'ONCHAIN CULTURE • IN YOUR POCKET',
+  'VIEW YOUR COLLECTIONS THE WARPLET WAY',
+  'MINTED ENERGY ONLY • NO COPE',
 ]
 
 function isFarcasterMiniApp(): boolean {
@@ -48,7 +50,6 @@ function Marquee({ text }: { text: string }) {
     <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur">
       <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[#1b0736] to-transparent" />
       <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[#1b0736] to-transparent" />
-
       <div className="py-2">
         <div className="whitespace-nowrap will-change-transform animate-[marquee_18s_linear_infinite]">
           <span className="mx-4 text-xs font-semibold tracking-wide text-white/90">{text}</span>
@@ -67,7 +68,6 @@ function dedupeCollections(list: CollectionSummary[]) {
     const chain = String(c.chain || '').toLowerCase()
     const contract = String(c.contractAddress || '').toLowerCase()
     if (!chain || !contract) continue
-
     const key = `${chain}:${contract}`
 
     const prev = map.get(key)
@@ -76,13 +76,12 @@ function dedupeCollections(list: CollectionSummary[]) {
       continue
     }
 
-    // Merge: prefer non-empty name/image, and keep the larger tokenCount
     map.set(key, {
       ...prev,
       ...c,
       chain,
       contractAddress: contract,
-      name: (c.name && c.name.trim()) ? c.name : prev.name,
+      name: c.name?.trim() ? c.name : prev.name,
       image: c.image ? c.image : prev.image,
       tokenCount: Math.max(prev.tokenCount ?? 0, c.tokenCount ?? 0),
     })
@@ -92,32 +91,63 @@ function dedupeCollections(list: CollectionSummary[]) {
 }
 
 export default function HomeClient() {
+  const router = useRouter()
+  const params = useSearchParams()
+
   const { isConnected, address } = useAccount()
 
-  // Allow browsing another wallet; default to connected address
   const [browseInput, setBrowseInput] = useState('')
   const [browseAddress, setBrowseAddress] = useState<string | null>(null)
-  const [browseStatus, setBrowseStatus] = useState<string>('') // e.g. "Not found"
+  const [browseStatus, setBrowseStatus] = useState<string>('')
 
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [collections, setCollections] = useState<CollectionSummary[]>([])
 
-  const targetAddress = browseAddress ?? address ?? ''
-
-  // Random banner once per page load
   const bannerText = useMemo(() => {
     return BANNER_MESSAGES[Math.floor(Math.random() * BANNER_MESSAGES.length)]
   }, [])
 
-  // Prevent redundant reloads (StrictMode in dev can call effects twice)
+  // Pull addr from URL if present (supports back navigation + sharing)
+  useEffect(() => {
+    const q = (params?.get('addr') || '').trim()
+    if (q) {
+      setBrowseAddress(q.toLowerCase())
+      setBrowseStatus('')
+      // Keep input blank (or you can show it; your choice)
+    } else {
+      setBrowseAddress(null)
+      setBrowseStatus('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params?.get('addr')])
+
+  const targetAddress = (browseAddress ?? address ?? '').toLowerCase()
+
   const lastQueryKeyRef = useRef<string>('')
+
+  // Restore scroll per wallet after render
+  useEffect(() => {
+    try {
+      const key = `warplet:homeScroll:${targetAddress || 'connected'}`
+      const saved = sessionStorage.getItem(key)
+      if (saved) {
+        const y = Number(saved)
+        if (!Number.isNaN(y)) {
+          // restore once
+          sessionStorage.removeItem(key)
+          window.scrollTo(0, y)
+        }
+      }
+    } catch {}
+    // restore when the target changes (browsing other wallets)
+  }, [targetAddress])
 
   useEffect(() => {
     const run = async () => {
       if (!isConnected || !targetAddress) return
 
-      const qKey = `${targetAddress.toLowerCase()}`
+      const qKey = `${targetAddress}`
       if (lastQueryKeyRef.current === qKey) return
       lastQueryKeyRef.current = qKey
 
@@ -128,10 +158,9 @@ export default function HomeClient() {
         const results = await Promise.all(
           CHAINS.map(async (chain) => {
             try {
-              const res = await fetch(
-                `/api/nfts/collections?address=${targetAddress}&chain=${chain}`,
-                { cache: 'no-store' }
-              )
+              const res = await fetch(`/api/nfts/collections?address=${targetAddress}&chain=${chain}`, {
+                cache: 'no-store',
+              })
               const json = await res.json()
               if (!res.ok) return []
               const cols = (json.collections ?? []) as CollectionSummary[]
@@ -147,7 +176,6 @@ export default function HomeClient() {
         )
 
         const merged = dedupeCollections(results.flat())
-
         merged.sort((a, b) => (b.tokenCount ?? 0) - (a.tokenCount ?? 0))
         setCollections(merged)
       } catch (e: any) {
@@ -173,6 +201,8 @@ export default function HomeClient() {
     if (!q) {
       setBrowseAddress(null)
       setBrowseStatus('')
+      router.push('/')
+      lastQueryKeyRef.current = ''
       return
     }
 
@@ -180,73 +210,96 @@ export default function HomeClient() {
     try {
       const res = await fetch(`/api/resolve?q=${encodeURIComponent(q)}`, { cache: 'no-store' })
       const json = await res.json()
-      if (!res.ok) {
+      if (!res.ok || !json?.address) {
         setBrowseAddress(null)
         setBrowseStatus('Not found')
         return
       }
-      setBrowseAddress(String(json.address || '').toLowerCase())
+      const resolved = String(json.address).toLowerCase()
+      setBrowseAddress(resolved)
       setBrowseStatus('')
-      // allow reload for new address
       lastQueryKeyRef.current = ''
+      router.push(`/?addr=${encodeURIComponent(resolved)}`)
     } catch {
       setBrowseAddress(null)
       setBrowseStatus('Not found')
     }
   }
 
+  const onMyWallet = () => {
+    setBrowseInput('')
+    setBrowseStatus('')
+    setBrowseAddress(null)
+    lastQueryKeyRef.current = ''
+    router.push('/')
+  }
+
   return (
     <main className="min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
       <div className="mx-auto max-w-md px-3 pb-24">
-        {/* Sticky banner always visible */}
         <div className="sticky top-0 z-50 pt-3 pb-2" style={{ backgroundColor: '#1b0736' }}>
           <Marquee text={bannerText} />
         </div>
 
-        {/* Top section (scrolls away) */}
         <section className="mt-2">
           <div className="rounded-3xl border border-white/10 bg-transparent p-3">
-            <ConnectBar />
+            <ConnectBar
+              showMyWalletButton={Boolean(browseAddress)}
+              onMyWallet={onMyWallet}
+            />
 
             {/* Search other wallets */}
             <div className="mt-3">
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    value={browseInput}
-                    onChange={(e) => setBrowseInput(e.target.value)}
-                    placeholder="Search: 0x… / ENS / farcaster username"
-                    className="
-                    flex-1 bg-transparent
-                    px-3 py-2 text-sm
-                    text-white
-                    placeholder:text-white/50
-                    outline-none
-                    "
-                  />
-                  <button
-                    type="button"
-                    onClick={onSearch}
-                    className="
-                      rounded-full px-4 py-2 text-xs font-semibold
-                      bg-white text-[#1b0736]
-                      active:scale-[0.98] transition
-                    "
-                  >
-                    Search
-                  </button>
-                </div>
+              <div
+                className="
+                  rounded-3xl border border-white/10 bg-white/5 p-2
+                  focus-within:ring-2 focus-within:ring-white/30
+                  transition
+                "
+              >
+                {/* Animated focus ring: subtle pulse while focused */}
+                <div className="focus-within:animate-[pulse_1.4s_ease-in-out_infinite]">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={browseInput}
+                      onChange={(e) => setBrowseInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') onSearch()
+                      }}
+                      placeholder="Search: 0x… / ENS / farcaster username"
+                      className="
+                        flex-1 bg-transparent
+                        px-3 py-2 text-sm
+                        !text-white
+                        placeholder:text-white/50
+                        outline-none
+                      "
+                      style={{ color: '#ffffff', caretColor: '#ffffff' }}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      onClick={onSearch}
+                      className="
+                        rounded-full px-4 py-2 text-xs font-semibold
+                        bg-white text-[#1b0736]
+                        active:scale-[0.98] transition
+                      "
+                    >
+                      Search
+                    </button>
+                  </div>
 
-                {browseStatus ? (
-                <div className="px-3 pt-2 text-xs text-white">
-                  {browseStatus}
+                  {browseStatus ? (
+                    <div className="px-3 pt-2 text-xs text-white">{browseStatus}</div>
+                  ) : browseAddress ? (
+                    <div className="px-3 pt-2 text-xs text-white">
+                      Browsing: {browseAddress}
+                    </div>
+                  ) : null}
                 </div>
-              ) : browseAddress ? (
-                <div className="px-3 pt-2 text-xs text-white">
-                  Browsing: {browseAddress}
-                </div>
-              ) : null}
-
               </div>
             </div>
 
@@ -281,10 +334,9 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* Collections grid (always 2 columns) */}
         <section className="mt-4">
           {emptyState ? (
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
               {emptyState}
             </div>
           ) : (
@@ -292,6 +344,7 @@ export default function HomeClient() {
               {collections.map((c) => (
                 <CollectionTile
                   key={`${String(c.chain).toLowerCase()}:${String(c.contractAddress).toLowerCase()}`}
+                  browseAddr={targetAddress}
                   c={{
                     ...c,
                     name: c.name ?? '',

@@ -10,13 +10,29 @@ type CollectionSummary = {
   tokenCount: number
 }
 
-export default function CollectionTile({ c }: { c: CollectionSummary }) {
+// Save scroll position per “browsed wallet”
+function saveHomeScroll(addrKey: string) {
+  try {
+    const y = typeof window !== 'undefined' ? window.scrollY : 0
+    sessionStorage.setItem(`warplet:homeScroll:${addrKey}`, String(y))
+  } catch {}
+}
+
+export default function CollectionTile({
+  c,
+  browseAddr,
+}: {
+  c: CollectionSummary
+  browseAddr?: string
+}) {
+  const addrKey = (browseAddr || '').toLowerCase()
+
   return (
     <div className="rounded-3xl border border-white/10 bg-transparent overflow-hidden">
-      {/* Image is the only link */}
       <Link
-        href={`/collection/${c.chain}/${c.contractAddress}`}
+        href={`/collection/${c.chain}/${c.contractAddress}${addrKey ? `?addr=${encodeURIComponent(addrKey)}` : ''}`}
         className="block active:scale-[0.99] transition"
+        onClick={() => saveHomeScroll(addrKey || 'connected')}
       >
         <div className="p-3">
           <div className="rounded-3xl overflow-hidden border border-white/10 bg-white/5">
@@ -29,7 +45,7 @@ export default function CollectionTile({ c }: { c: CollectionSummary }) {
                 loading="lazy"
               />
             ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-xs text-white/50">
+              <div className="w-full aspect-square flex items-center justify-center text-xs text-white/70">
                 No image
               </div>
             )}
@@ -37,10 +53,9 @@ export default function CollectionTile({ c }: { c: CollectionSummary }) {
         </div>
       </Link>
 
-      {/* Transparent info area */}
       <div className="px-4 pb-4">
         <div className="text-sm font-semibold truncate text-white">{c.name}</div>
-        <div className="mt-1 text-xs text-white/70">
+        <div className="mt-1 text-xs text-white">
           {c.tokenCount} item{c.tokenCount === 1 ? '' : 's'}
         </div>
       </div>
