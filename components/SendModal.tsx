@@ -34,9 +34,8 @@ export default function SendModal({
   const [err, setErr] = useState<string | null>(null)
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null)
 
-  // We measure modal box to clamp fully inside viewport
   const boxRef = useRef<HTMLDivElement | null>(null)
-  const [boxSize, setBoxSize] = useState({ w: 360, h: 420 }) // sensible defaults
+  const [boxSize, setBoxSize] = useState({ w: 340, h: 390 })
 
   const max = Math.max(1, Math.floor(Number(maxAmount || 1)))
 
@@ -48,7 +47,6 @@ export default function SendModal({
     setErr(null)
   }, [open])
 
-  // Stable portal root (works better in embedded environments)
   useEffect(() => {
     if (!open) return
     if (typeof document === 'undefined') return
@@ -75,19 +73,16 @@ export default function SendModal({
     return Math.max(1, Math.min(max, Math.floor(n)))
   }, [amountStr, max])
 
-  // Measure the modal after it opens (and when max changes / content changes)
   useLayoutEffect(() => {
     if (!open) return
     if (!boxRef.current) return
 
     const measure = () => {
       const r = boxRef.current!.getBoundingClientRect()
-      setBoxSize({ w: Math.max(280, Math.ceil(r.width)), h: Math.max(200, Math.ceil(r.height)) })
+      setBoxSize({ w: Math.max(260, Math.ceil(r.width)), h: Math.max(200, Math.ceil(r.height)) })
     }
 
     measure()
-
-    // ResizeObserver to handle dynamic height (errors, 1155 quantity box, etc.)
     const ro = new ResizeObserver(() => measure())
     ro.observe(boxRef.current)
 
@@ -98,7 +93,6 @@ export default function SendModal({
     }
   }, [open, max])
 
-  // Compute a viewport-safe top/left for the modal box
   const safePos = useMemo(() => {
     if (typeof window === 'undefined') return { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }
 
@@ -106,22 +100,18 @@ export default function SendModal({
     const vh = window.innerHeight
     const pad = 12
 
-    // Desired center = anchor center, else viewport center
     const cx = anchorRect ? anchorRect.left + anchorRect.width / 2 : vw / 2
     const cy = anchorRect ? anchorRect.top + anchorRect.height / 2 : vh / 2
 
-    // Convert to top-left and clamp so full box stays visible
     const left = clamp(cx - boxSize.w / 2, pad, vw - pad - boxSize.w)
     const top = clamp(cy - boxSize.h / 2, pad, vh - pad - boxSize.h)
 
     return { left, top }
   }, [anchorRect, boxSize.w, boxSize.h])
 
-  // Resolve 0x / ENS / farcaster username -> 0x address
   const resolveToAddress = async (q: string): Promise<`0x${string}` | null> => {
     const raw = q.trim()
     if (!raw) return null
-
     if (isHexAddress(raw)) return raw.toLowerCase() as `0x${string}`
 
     try {
@@ -129,9 +119,7 @@ export default function SendModal({
       const json = await res.json()
       const addr = String(json?.address || '').trim()
       if (res.ok && isHexAddress(addr)) return addr.toLowerCase() as `0x${string}`
-    } catch {
-      // ignore
-    }
+    } catch {}
     return null
   }
 
@@ -144,7 +132,6 @@ export default function SendModal({
 
   return createPortal(
     <div className="fixed inset-0" style={{ zIndex: 2147483647, pointerEvents: 'auto' }}>
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/70"
         onClick={(e) => {
@@ -153,13 +140,12 @@ export default function SendModal({
         aria-hidden="true"
       />
 
-      {/* Modal box positioned fully inside viewport */}
       <div className="absolute" style={{ left: safePos.left, top: safePos.top }}>
         <div
           ref={boxRef}
           className="
-            relative w-[92vw] max-w-md
-            max-h-[80vh] overflow-auto
+            relative w-[88vw] max-w-sm
+            max-h-[80vh] overflow-y-auto overflow-x-hidden
             rounded-3xl border border-white/20
             bg-[#a78bfa] text-white
             shadow-[0_25px_80px_rgba(0,0,0,0.65)]
@@ -170,7 +156,6 @@ export default function SendModal({
         >
           <div className="p-4 border-b border-white/20 bg-white/10">
             <div className="text-sm font-semibold truncate text-white">{title}</div>
-            {/* Removed helper line per request */}
           </div>
 
           <div className="p-4 space-y-3">
@@ -178,14 +163,6 @@ export default function SendModal({
               <input
                 value={toInput}
                 onChange={(e) => setToInput(e.target.value)}
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    setErr(null)
-                    const resolved = await resolveToAddress(toInput)
-                    if (!resolved) setErr('Not found')
-                  }
-                }}
                 placeholder="0x…  |  madyak.eth  |  madyak"
                 className="w-full bg-transparent px-3 py-2 text-sm text-white placeholder:text-white/70 outline-none"
                 style={{ color: '#ffffff', caretColor: '#ffffff' }}
@@ -195,7 +172,6 @@ export default function SendModal({
               />
             </div>
 
-            {/* Quantity only if ERC-1155 (max > 1) */}
             {max > 1 ? (
               <div className="rounded-2xl border border-white/20 bg-white/15 p-3">
                 <div className="flex items-center justify-between">
@@ -224,12 +200,10 @@ export default function SendModal({
                       const v = e.target.value.replace(/[^\d]/g, '')
                       setAmountStr(v || '1')
                     }}
-                    className="flex-1 rounded-full border border-white/25 bg-white/15 px-4 py-2 text-sm text-white outline-none"
+                    className="flex-1 min-w-0 rounded-full border border-white/25 bg-white/15 px-4 py-2 text-sm text-white outline-none"
                     style={{ color: '#ffffff', caretColor: '#ffffff' }}
                   />
                 </div>
-
-                <div className="mt-2 text-[11px] text-white/90">Choose 1 to {max}.</div>
               </div>
             ) : null}
 
@@ -240,7 +214,7 @@ export default function SendModal({
                 type="button"
                 onClick={onClose}
                 className="
-                  flex-1 rounded-full px-4 py-3 text-sm font-semibold
+                  flex-1 rounded-full px-4 py-2.5 text-sm font-semibold
                   border border-white/25 bg-white/15 text-white
                   active:scale-[0.98] transition
                 "
@@ -276,7 +250,7 @@ export default function SendModal({
                   }
                 }}
                 className={[
-                  'flex-1 rounded-full px-4 py-3 text-sm font-semibold active:scale-[0.98] transition',
+                  'flex-1 rounded-full px-4 py-2.5 text-sm font-semibold active:scale-[0.98] transition',
                   canAttemptSend ? 'bg-white text-[#1b0736]' : 'bg-white/25 text-white/70 cursor-not-allowed',
                 ].join(' ')}
                 disabled={!canAttemptSend}
