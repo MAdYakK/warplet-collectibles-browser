@@ -11,12 +11,13 @@ function isProbablyMiniApp() {
 }
 
 export default function ConnectBar({
-  showMyWalletButton,
+  showMyWalletButton = false,
   onMyWallet,
 }: {
   showMyWalletButton?: boolean
   onMyWallet?: () => void
 }) {
+  // ConnectBar v2 (My Wallet support)
   const { isConnected, address } = useAccount()
   const { connect, connectors, isPending, error } = useConnect()
 
@@ -25,6 +26,7 @@ export default function ConnectBar({
   const primary =
     connectors.find((c) => c.ready) || (connectors.length ? connectors[0] : undefined)
 
+  // Auto-connect inside miniapp/preview once we have a connector
   useEffect(() => {
     if (!miniApp) return
     if (isConnected) return
@@ -52,17 +54,17 @@ export default function ConnectBar({
       </div>
 
       <div className="shrink-0 flex items-center gap-2">
+        {/* ✅ ALWAYS show when requested */}
         {showMyWalletButton ? (
           <button
             type="button"
-            onClick={onMyWallet}
-            disabled={!isConnected}
-            className={[
-              'rounded-full px-4 py-2 text-xs font-semibold border active:scale-[0.98] transition',
-              isConnected
-                ? 'border border-white/15 bg-white/5 text-white'
-                : 'border border-white/10 bg-white/5 text-white/40 cursor-not-allowed',
-            ].join(' ')}
+            onClick={() => onMyWallet?.()}
+            className="
+              rounded-full px-4 py-2 text-xs font-semibold
+              border border-white/15 bg-white/5 text-white
+              active:scale-[0.98] transition
+            "
+            title="Return to your wallet"
           >
             My Wallet
           </button>
