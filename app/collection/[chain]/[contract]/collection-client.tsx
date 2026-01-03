@@ -109,7 +109,7 @@ export default function CollectionClient() {
   const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
   const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
 
-  // ✅ GLOBAL Send modal state (survives virtualization)
+  // ✅ Global modal state (cannot be eaten by virtualization)
   const [sendOpen, setSendOpen] = useState(false)
   const [sendNft, setSendNft] = useState<NftItem | null>(null)
   const [sendAnchorRect, setSendAnchorRect] = useState<AnchorRect | null>(null)
@@ -126,7 +126,10 @@ export default function CollectionClient() {
 
   return (
     <main className="mx-auto max-w-md min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
-      <div className="sticky top-0 z-40 backdrop-blur border-b border-white/10" style={{ backgroundColor: 'rgba(27, 7, 54, 0.85)' }}>
+      <div
+        className="sticky top-0 z-40 backdrop-blur border-b border-white/10"
+        style={{ backgroundColor: 'rgba(27, 7, 54, 0.85)' }}
+      >
         <div className="p-3 flex items-center justify-between gap-3">
           {/* Buttons bubble */}
           <div className="rounded-full ring-1 ring-white/20 bg-white/10 p-1 flex items-center gap-1 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
@@ -256,7 +259,7 @@ export default function CollectionClient() {
         )}
       </div>
 
-      {/* ✅ ONE modal, always mounted outside virtualized rows */}
+      {/* ✅ One modal, outside virtualized content */}
       <SendModal
         open={sendOpen}
         onClose={() => setSendOpen(false)}
@@ -284,6 +287,11 @@ export default function CollectionClient() {
           }
         }}
       />
+
+      {/* ✅ DEBUG badge: if this changes when you click Send, openSend is wired */}
+      <div className="fixed bottom-2 left-2 z-[2147483647] text-[10px] text-white/90 bg-black/50 px-2 py-1 rounded-full pointer-events-none">
+        sendOpen: {String(sendOpen)} | sendNft: {sendNft ? 'yes' : 'no'}
+      </div>
     </main>
   )
 }
