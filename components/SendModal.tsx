@@ -89,6 +89,11 @@ export default function SendModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[2147483647]">
+      {/* ✅ BEACON: if you don't see this, the modal is not mounted */}
+      <div className="absolute top-2 left-2 text-[10px] text-white/80 bg-black/40 px-2 py-1 rounded-full pointer-events-none">
+        SendModal mounted
+      </div>
+
       {/* Backdrop: close ONLY when clicking the backdrop itself */}
       <div
         className="absolute inset-0 bg-black/70"
