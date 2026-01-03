@@ -40,6 +40,10 @@ export default function TokenCard({
   onOpenSend?: (args: { nft: NftItem; anchorRect: AnchorRect | null; is1155: boolean; maxAmount: number }) => void
 }) {
   const [imgFailed, setImgFailed] = useState(false)
+
+  // ✅ DEBUG: visual click beacon
+  const [sendClicks, setSendClicks] = useState(0)
+
   const cardRef = useRef<HTMLDivElement | null>(null)
 
   const osUrl = useMemo(
@@ -116,12 +120,20 @@ export default function TokenCard({
           {nft.name ?? `Token #${nft.tokenId}`}
         </div>
 
+        {/* ✅ DEBUG */}
+        <div className="mt-1 text-[11px] text-white/70">
+          sendClicks: {sendClicks} | disableActions: {String(disableActions)}
+        </div>
+
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             className={[buttonBase, disableActions ? disabledBtn : enabledBtn].join(' ')}
-            disabled={disableActions}
             type="button"
+            // ✅ DEBUG: force enabled so we can confirm clicks work
+            disabled={false}
             onClick={() => {
+              setSendClicks((n) => n + 1)
+
               if (disableActions) return
 
               const rect = cardRef.current?.getBoundingClientRect() ?? null
@@ -129,6 +141,7 @@ export default function TokenCard({
                 ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
                 : null
 
+              // ✅ open global modal (CollectionClient owns it)
               onOpenSend?.({ nft, anchorRect, is1155, maxAmount: is1155 ? maxAmount : 1 })
             }}
           >
