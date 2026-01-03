@@ -11,13 +11,7 @@ import type { NftItem } from '../../../../lib/types'
 import useViewMode from '../../../../lib/useViewMode'
 
 type RouteParams = { chain?: string; contract?: string }
-
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
-
-function shortAddr(a: string) {
-  if (!a) return ''
-  return `${a.slice(0, 6)}…${a.slice(-4)}`
-}
 
 export default function CollectionClient() {
   const router = useRouter()
@@ -42,17 +36,12 @@ export default function CollectionClient() {
     defaultMode: 'cards',
   })
 
-  // ---- SWR: tokens cached per target+chain+contract ----
   const tokensKey =
     isConnected && targetAddress && contract
       ? `warplet:tokens:${targetAddress}:${chain}:${contract}`
       : null
 
-  const {
-    data: nftsData,
-    isLoading,
-    error,
-  } = useSWR<NftItem[]>(
+  const { data: nftsData, isLoading, error } = useSWR<NftItem[]>(
     tokensKey,
     async () => {
       const json = await fetcher(
@@ -60,11 +49,7 @@ export default function CollectionClient() {
       )
       return (json.nfts ?? []) as NftItem[]
     },
-    {
-      dedupingInterval: 60_000,
-      revalidateOnFocus: false,
-      keepPreviousData: true,
-    }
+    { dedupingInterval: 60_000, revalidateOnFocus: false, keepPreviousData: true }
   )
 
   const nfts = nftsData ?? []
@@ -79,10 +64,9 @@ export default function CollectionClient() {
     return `${nfts.length} item${nfts.length === 1 ? '' : 's'}`
   }, [contract, isConnected, loading, err, nfts.length])
 
-  const pillBase =
-    'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]'
+  const pillBase = 'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]'
 
-  // ---- Virtualization (window scroll) ----
+  // Virtualization
   const listRef = useRef<HTMLDivElement | null>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
 
@@ -95,23 +79,20 @@ export default function CollectionClient() {
 
   const cardsVirtualizer = useWindowVirtualizer({
     count: nfts.length,
-    estimateSize: () => 560,
+    estimateSize: () => 590,
     overscan: 8,
     scrollMargin,
   })
 
   const gridVirtualizer = useWindowVirtualizer({
     count: gridRows,
-    estimateSize: () => 360,
+    estimateSize: () => 420,
     overscan: 8,
     scrollMargin,
   })
 
-  const items =
-    mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
-
-  const totalSize =
-    mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
+  const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
+  const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
 
   return (
     <main className="mx-auto max-w-md min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
@@ -120,6 +101,7 @@ export default function CollectionClient() {
         style={{ backgroundColor: 'rgba(27, 7, 54, 0.85)' }}
       >
         <div className="p-3 flex items-center justify-between gap-3">
+          {/* Buttons bubble */}
           <div className="rounded-full border border-white/10 bg-white/5 p-1 flex items-center gap-1">
             <button
               type="button"
@@ -154,25 +136,16 @@ export default function CollectionClient() {
             </button>
           </div>
 
-          <div className="min-w-0 text-right">
-            <div className="flex items-center justify-end gap-2">
-              {disableActions ? (
-                <div className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/90">
-                  Browsing {shortAddr(targetAddress)}
-                </div>
-              ) : null}
-
-              <div className="text-sm font-semibold truncate text-white">
-                {contract || 'Collection'}
-              </div>
-            </div>
-
+          {/* Status bubble */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right">
+            <div className="text-sm font-semibold truncate text-white">{contract || 'Collection'}</div>
             <div className="text-xs text-white/80">{statusText}</div>
           </div>
         </div>
       </div>
 
-      <div ref={listRef} className="p-3 pb-24">
+      {/* Add edge breathing room */}
+      <div ref={listRef} className="p-4 pb-24">
         {!isConnected ? (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
             Connect to view
@@ -213,19 +186,10 @@ export default function CollectionClient() {
                         width: '100%',
                         transform: `translateY(${v.start - scrollMargin}px)`,
                       }}
-                      className="grid grid-cols-2 gap-4"
+                      className="grid grid-cols-2 gap-3"
                     >
-                      {left ? (
-                        <TokenCard nft={left} variant="grid" disableActions={disableActions} />
-                      ) : (
-                        <div />
-                      )}
-
-                      {right ? (
-                        <TokenCard nft={right} variant="grid" disableActions={disableActions} />
-                      ) : (
-                        <div />
-                      )}
+                      {left ? <TokenCard nft={left} variant="grid" disableActions={disableActions} /> : <div />}
+                      {right ? <TokenCard nft={right} variant="grid" disableActions={disableActions} /> : <div />}
                     </div>
                   )
                 })}
