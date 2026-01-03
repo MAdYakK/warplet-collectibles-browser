@@ -1,16 +1,18 @@
 'use client'
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import useSWR from 'swr'
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
-
 
 import TokenCard from '../../../../components/TokenCard'
 import type { NftItem } from '../../../../lib/types'
 import useViewMode from '../../../../lib/useViewMode'
 
 type RouteParams = { chain?: string; contract?: string }
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 function shortAddr(a: string) {
   if (!a) return ''
@@ -27,50 +29,47 @@ export default function CollectionClient() {
   const contract = useMemo(() => String(params?.contract ?? '').toLowerCase(), [params?.contract])
 
   const browsedAddr = (searchParams?.get('addr') || '').trim().toLowerCase()
-  const targetAddress = (browsedAddr || connectedAddress || '').toLowerCase()
-
   const connectedLower = (connectedAddress || '').toLowerCase()
+  const targetAddress = (browsedAddr || connectedLower || '').toLowerCase()
 
   const disableActions =
     Boolean(browsedAddr) &&
     Boolean(connectedLower) &&
     browsedAddr !== connectedLower
 
-
-  const [loading, setLoading] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [nfts, setNfts] = useState<NftItem[]>([])
-
   const { mode, setMode } = useViewMode({
     storageKey: 'warplet:collectionViewMode',
     defaultMode: 'cards',
   })
 
-  useEffect(() => {
-    const run = async () => {
-      if (!isConnected || !targetAddress) return
-      if (!contract) return
+  // ---- SWR: tokens cached per target+chain+contract ----
+  const tokensKey =
+    isConnected && targetAddress && contract
+      ? `warplet:tokens:${targetAddress}:${chain}:${contract}`
+      : null
 
-      setLoading(true)
-      setErr(null)
-
-      try {
-        const res = await fetch(
-          `/api/nfts/tokens?address=${targetAddress}&chain=${chain}&contract=${contract}`,
-          { cache: 'no-store' }
-        )
-        const json = await res.json()
-        if (!res.ok) throw new Error(json?.error || 'Failed to load tokens')
-        setNfts((json.nfts ?? []) as NftItem[])
-      } catch (e: any) {
-        setErr(e?.message ?? 'Error')
-      } finally {
-        setLoading(false)
-      }
+  const {
+    data: nftsData,
+    isLoading,
+    error,
+  } = useSWR<NftItem[]>(
+    tokensKey,
+    async () => {
+      const json = await fetcher(
+        `/api/nfts/tokens?address=${targetAddress}&chain=${chain}&contract=${contract}`
+      )
+      return (json.nfts ?? []) as NftItem[]
+    },
+    {
+      dedupingInterval: 60_000,
+      revalidateOnFocus: false,
+      keepPreviousData: true,
     }
+  )
 
-    run()
-  }, [isConnected, targetAddress, chain, contract])
+  const nfts = nftsData ?? []
+  const loading = isLoading
+  const err = error ? 'Failed to load tokens' : null
 
   const statusText = useMemo(() => {
     if (!contract) return 'Bad route'
@@ -83,38 +82,36 @@ export default function CollectionClient() {
   const pillBase =
     'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]'
 
-  // ---------------------------
-  // Virtualization (window scroll)
-  // ---------------------------
+  // ---- Virtualization (window scroll) ----
   const listRef = useRef<HTMLDivElement | null>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
 
   useLayoutEffect(() => {
     if (!listRef.current) return
-    // offsetTop = distance from top of page; used so virtualizer positions correctly
     setScrollMargin(listRef.current.offsetTop)
   }, [mode])
 
-  // For grid: render rows of 2
   const gridRows = useMemo(() => Math.ceil(nfts.length / 2), [nfts.length])
 
   const cardsVirtualizer = useWindowVirtualizer({
-  count: nfts.length,
-  estimateSize: () => 560, // guess; measured
-  overscan: 8,
-  scrollMargin,
-})
+    count: nfts.length,
+    estimateSize: () => 560,
+    overscan: 8,
+    scrollMargin,
+  })
 
-const gridVirtualizer = useWindowVirtualizer({
-  count: gridRows,
-  estimateSize: () => 360, // guess; measured
-  overscan: 8,
-  scrollMargin,
-})
+  const gridVirtualizer = useWindowVirtualizer({
+    count: gridRows,
+    estimateSize: () => 360,
+    overscan: 8,
+    scrollMargin,
+  })
 
+  const items =
+    mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
 
-  const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
-  const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
+  const totalSize =
+    mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
 
   return (
     <main className="mx-auto max-w-md min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
@@ -175,9 +172,7 @@ const gridVirtualizer = useWindowVirtualizer({
         </div>
       </div>
 
-      {/* listRef: used to compute scrollMargin so window-virtualization aligns below header */}
       <div ref={listRef} className="p-3 pb-24">
-        {/* Empty/Loading */}
         {!isConnected ? (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
             Connect to view
@@ -195,19 +190,14 @@ const gridVirtualizer = useWindowVirtualizer({
             No items found.
           </div>
         ) : (
-          // Virtualized container
-          <div
-            style={{
-              height: `${totalSize}px`,
-              position: 'relative',
-            }}
-          >
+          <div style={{ height: `${totalSize}px`, position: 'relative' }}>
             {mode === 'grid' ? (
               <>
                 {items.map((v) => {
                   const rowIndex = v.index
                   const leftIndex = rowIndex * 2
                   const rightIndex = leftIndex + 1
+
                   const left = nfts[leftIndex]
                   const right = nfts[rightIndex]
 
@@ -226,21 +216,13 @@ const gridVirtualizer = useWindowVirtualizer({
                       className="grid grid-cols-2 gap-4"
                     >
                       {left ? (
-                        <TokenCard
-                          nft={left}
-                          variant="grid"
-                          disableActions={disableActions}
-                        />
+                        <TokenCard nft={left} variant="grid" disableActions={disableActions} />
                       ) : (
                         <div />
                       )}
 
                       {right ? (
-                        <TokenCard
-                          nft={right}
-                          variant="grid"
-                          disableActions={disableActions}
-                        />
+                        <TokenCard nft={right} variant="grid" disableActions={disableActions} />
                       ) : (
                         <div />
                       )}
@@ -266,11 +248,7 @@ const gridVirtualizer = useWindowVirtualizer({
                       }}
                       className="pb-4"
                     >
-                      <TokenCard
-                        nft={nft}
-                        variant="cards"
-                        disableActions={disableActions}
-                      />
+                      <TokenCard nft={nft} variant="cards" disableActions={disableActions} />
                     </div>
                   )
                 })}

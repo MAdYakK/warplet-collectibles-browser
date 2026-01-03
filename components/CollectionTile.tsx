@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import React, { useState } from 'react'
 
 type CollectionSummary = {
   chain: string
@@ -25,6 +26,7 @@ export default function CollectionTile({
   browseAddr?: string
 }) {
   const addrKey = (browseAddr || '').toLowerCase()
+  const [imgFailed, setImgFailed] = useState(false)
 
   return (
     <div className="rounded-3xl border border-white/10 bg-transparent overflow-hidden">
@@ -35,7 +37,7 @@ export default function CollectionTile({
       >
         <div className="p-3">
           <div className="rounded-3xl overflow-hidden border border-white/10 bg-white/5">
-            {c.image ? (
+            {c.image && !imgFailed ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={c.image}
@@ -44,10 +46,18 @@ export default function CollectionTile({
                 loading="lazy"
                 decoding="async"
                 fetchPriority="low"
+                onError={() => setImgFailed(true)}
               />
             ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-xs text-white/70">
-                No image
+              <div className="w-full aspect-square flex items-center justify-center bg-white/5">
+                <div className="text-center px-3">
+                  <div className="text-xs font-semibold text-white/90 truncate">
+                    {c.name || 'Collection'}
+                  </div>
+                  <div className="mt-1 text-[11px] text-white/60">
+                    Image unavailable
+                  </div>
+                </div>
               </div>
             )}
           </div>
