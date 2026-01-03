@@ -34,13 +34,19 @@ export default function CollectionTile({
 
   return (
     <div className="space-y-2">
-      {/* IMAGE BUBBLE (link) */}
       <Link
         href={href}
         className="block active:scale-[0.99] transition"
         onClick={() => saveHomeScroll(addrKey || 'connected')}
       >
-        <div className="rounded-3xl overflow-hidden border border-white/10 bg-white/5 shadow-sm">
+        <div
+          className="
+            rounded-3xl overflow-hidden
+            border border-white/20
+            bg-[#2a0c52]
+            shadow-[0_14px_45px_rgba(0,0,0,0.45)]
+          "
+        >
           {c.image && !imgFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -49,24 +55,27 @@ export default function CollectionTile({
               className="w-full aspect-square object-cover block"
               loading="lazy"
               decoding="async"
-              fetchPriority="low"
               onError={() => setImgFailed(true)}
             />
           ) : (
-            <div className="w-full aspect-square flex items-center justify-center bg-white/5">
-              <div className="text-center px-3">
-                <div className="text-xs font-semibold text-white/90 truncate">{c.name || 'Collection'}</div>
-                <div className="mt-1 text-[11px] text-white/60">Image unavailable</div>
-              </div>
+            <div className="w-full aspect-square flex items-center justify-center bg-black/25">
+              <div className="text-xs text-white/80">Image unavailable</div>
             </div>
           )}
         </div>
       </Link>
 
-      {/* TEXT BUBBLE (not link) */}
-      <div className="rounded-2xl border border-white/10 bg-[#a78bfa]/15 px-3 py-2 shadow-sm">
+      <div
+        className="
+          rounded-2xl
+          border border-white/20
+          bg-[#6d28d9]
+          px-3 py-2
+          shadow-[0_10px_35px_rgba(0,0,0,0.35)]
+        "
+      >
         <div className="text-sm font-semibold text-white truncate">{c.name}</div>
-        <div className="mt-0.5 text-xs text-white/80">
+        <div className="mt-0.5 text-xs text-white/90">
           {c.tokenCount} item{c.tokenCount === 1 ? '' : 's'}
         </div>
       </div>

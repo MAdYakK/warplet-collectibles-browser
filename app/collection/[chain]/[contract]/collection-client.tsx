@@ -102,7 +102,8 @@ export default function CollectionClient() {
       >
         <div className="p-3 flex items-center justify-between gap-3">
           {/* Buttons bubble */}
-          <div className="rounded-full border border-white/10 bg-white/5 p-1 flex items-center gap-1 shadow-sm">
+          <div className="rounded-full ring-1 ring-white/20 bg-white/10 p-1 flex items-center gap-1 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+
             <button
               type="button"
               onClick={() => router.push(browsedAddr ? `/?addr=${encodeURIComponent(browsedAddr)}` : '/')}
@@ -137,11 +138,12 @@ export default function CollectionClient() {
           </div>
 
           {/* Status bubble */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right shadow-sm">
+          <div className="rounded-2xl ring-1 ring-white/20 bg-white/10 px-3 py-2 text-right shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+
             <div className="text-sm font-semibold truncate text-white">
-              {/* If you want, we can shorten this later */}
-              {contract || 'Collection'}
-            </div>
+                Collection
+              </div>
+
             <div className="text-xs text-white/80">{statusText}</div>
           </div>
         </div>
@@ -150,19 +152,23 @@ export default function CollectionClient() {
       {/* Edge padding so bubbles don't touch sides */}
       <div ref={listRef} className="p-4 pb-24">
         {!isConnected ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+          <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+
             Connect to view
           </div>
         ) : loading ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+          <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+
             Loading…
           </div>
         ) : err ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+          <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+
             {err}
           </div>
         ) : nfts.length === 0 ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+          <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+
             No items found.
           </div>
         ) : (

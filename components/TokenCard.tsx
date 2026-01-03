@@ -64,17 +64,9 @@ export default function TokenCard({
 
     if (isFarcasterMiniApp()) {
       const { sdk } = await import('@farcaster/miniapp-sdk')
-
       const embeds: [] | [string] | [string, string] =
-        img && appUrl ? [img, appUrl] :
-        img ? [img] :
-        appUrl ? [appUrl] :
-        []
-
-      await sdk.actions.composeCast({
-        text: SHARE_TEXT,
-        embeds,
-      })
+        img && appUrl ? [img, appUrl] : img ? [img] : appUrl ? [appUrl] : []
+      await sdk.actions.composeCast({ text: SHARE_TEXT, embeds })
     } else {
       const msg = `${SHARE_TEXT}\n\n${appUrl || ''}`.trim()
       alert(`Open in Warpcast to share.\n\nCopy text:\n${msg}`)
@@ -83,20 +75,26 @@ export default function TokenCard({
 
   const buttonBase = 'rounded-full px-4 py-2 text-xs font-semibold transition active:scale-[0.98]'
   const enabledBtn = 'bg-white text-[#1b0736]'
-  const disabledBtn = 'bg-white/20 text-white/50 cursor-not-allowed'
+  const disabledBtn = 'bg-white/25 text-white/60 cursor-not-allowed'
 
-  // Slightly tighter spacing in grid
   const gapClass = variant === 'grid' ? 'space-y-2' : 'space-y-3'
 
   return (
     <div className={gapClass}>
-      {/* IMAGE BUBBLE (separate) */}
+      {/* IMAGE BUBBLE */}
       <button
         type="button"
         className="block w-full text-left active:scale-[0.99] transition"
         onClick={() => openUrl(osUrl)}
       >
-        <div className="rounded-3xl overflow-hidden border border-white/10 bg-white/5 shadow-sm">
+        <div
+          className="
+            rounded-3xl overflow-hidden
+            border border-white/20
+            bg-[#2a0c52]
+            shadow-[0_14px_45px_rgba(0,0,0,0.45)]
+          "
+        >
           {img && !imgFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -108,15 +106,23 @@ export default function TokenCard({
               onError={() => setImgFailed(true)}
             />
           ) : (
-            <div className="w-full aspect-square flex items-center justify-center bg-white/5">
-              <div className="text-xs text-white/70">No image</div>
+            <div className="w-full aspect-square flex items-center justify-center bg-black/25">
+              <div className="text-xs text-white/80">No image</div>
             </div>
           )}
         </div>
       </button>
 
-      {/* INFO + ACTIONS BUBBLE (separate, purple) */}
-      <div className="rounded-2xl border border-white/10 bg-[#a78bfa]/15 px-3 py-3 shadow-sm">
+      {/* INFO + ACTIONS BUBBLE (separate) */}
+      <div
+        className="
+          rounded-2xl
+          border border-white/20
+          bg-[#6d28d9]
+          px-3 py-3
+          shadow-[0_10px_35px_rgba(0,0,0,0.35)]
+        "
+      >
         <div className="text-sm font-semibold text-white truncate">
           {nft.name ?? `Token #${nft.tokenId}`}
         </div>
@@ -129,6 +135,7 @@ export default function TokenCard({
           >
             Send
           </button>
+
           <button
             className={[buttonBase, disableActions ? disabledBtn : enabledBtn].join(' ')}
             onClick={share}
