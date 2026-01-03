@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
 import ConnectBar from '../components/ConnectBar'
 import CollectionTile from '../components/CollectionTile'
@@ -14,28 +14,18 @@ type CollectionSummary = {
   image?: string
 }
 
-// Major EVM chains (Moralis supports many; we’ll ignore any that error)
-const CHAINS: string[] = [
-  'ethereum',
-  'base',
-  'polygon',
-  'optimism',
-  'arbitrum',
-  'avalanche',
-  'bsc',
-]
+const CHAINS: string[] = ['ethereum', 'base', 'polygon', 'optimism', 'arbitrum', 'avalanche', 'bsc']
 
 const FEATURED_MINIAPP_URL =
   'https://farcaster.xyz/miniapps/2vgEwTqkDV2n/crytpodickpunks-mint'
 
 const BANNER_MESSAGES = [
-  'WARPLET COLLECTIBLES • BROWSE YOUR NFTs • SHARE TO FARCASTER',
-  'YOUR WALLET, VISUALIZED • MAJOR EVM CHAINS',
-  'COLLECT • SEND • SHARE • FLEX',
+  'WARPLET COLLECTIBLES • BROWSE YOUR NFTs • SHARE TO FARCASTER • ',
+  'YOUR WALLET, VISUALIZED • MAJOR EVM CHAINS • ',
+  'COLLECT • SEND • SHARE • FLEX • ',
   'NFTS SHOULD BE FUN TO BROWSE',
-  'ONCHAIN CULTURE • IN YOUR POCKET',
-  'VIEW YOUR COLLECTIONS THE WARPLET WAY',
-  'MINTED ENERGY ONLY • NO COPE',
+  'VIEW YOUR COLLECTIONS YOUR WAY',
+
 ]
 
 function isFarcasterMiniApp(): boolean {
@@ -70,20 +60,66 @@ function Marquee({ text }: { text: string }) {
   )
 }
 
+function dedupeCollections(list: CollectionSummary[]) {
+  const map = new Map<string, CollectionSummary>()
+
+  for (const c of list) {
+    const chain = String(c.chain || '').toLowerCase()
+    const contract = String(c.contractAddress || '').toLowerCase()
+    if (!chain || !contract) continue
+
+    const key = `${chain}:${contract}`
+
+    const prev = map.get(key)
+    if (!prev) {
+      map.set(key, { ...c, chain, contractAddress: contract })
+      continue
+    }
+
+    // Merge: prefer non-empty name/image, and keep the larger tokenCount
+    map.set(key, {
+      ...prev,
+      ...c,
+      chain,
+      contractAddress: contract,
+      name: (c.name && c.name.trim()) ? c.name : prev.name,
+      image: c.image ? c.image : prev.image,
+      tokenCount: Math.max(prev.tokenCount ?? 0, c.tokenCount ?? 0),
+    })
+  }
+
+  return Array.from(map.values())
+}
+
 export default function HomeClient() {
   const { isConnected, address } = useAccount()
+
+  // Allow browsing another wallet; default to connected address
+  const [browseInput, setBrowseInput] = useState('')
+  const [browseAddress, setBrowseAddress] = useState<string | null>(null)
+  const [browseStatus, setBrowseStatus] = useState<string>('') // e.g. "Not found"
+
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [collections, setCollections] = useState<CollectionSummary[]>([])
+
+  const targetAddress = browseAddress ?? address ?? ''
 
   // Random banner once per page load
   const bannerText = useMemo(() => {
     return BANNER_MESSAGES[Math.floor(Math.random() * BANNER_MESSAGES.length)]
   }, [])
 
+  // Prevent redundant reloads (StrictMode in dev can call effects twice)
+  const lastQueryKeyRef = useRef<string>('')
+
   useEffect(() => {
     const run = async () => {
-      if (!isConnected || !address) return
+      if (!isConnected || !targetAddress) return
+
+      const qKey = `${targetAddress.toLowerCase()}`
+      if (lastQueryKeyRef.current === qKey) return
+      lastQueryKeyRef.current = qKey
 
       setLoading(true)
       setErr(null)
@@ -93,25 +129,26 @@ export default function HomeClient() {
           CHAINS.map(async (chain) => {
             try {
               const res = await fetch(
-                `/api/nfts/collections?address=${address}&chain=${chain}`,
+                `/api/nfts/collections?address=${targetAddress}&chain=${chain}`,
                 { cache: 'no-store' }
               )
               const json = await res.json()
               if (!res.ok) return []
               const cols = (json.collections ?? []) as CollectionSummary[]
-              // Ensure chain is set (some APIs might omit)
-              return cols.map((c) => ({ ...c, chain: (c.chain ?? chain) as string }))
+              return cols.map((c) => ({
+                ...c,
+                chain: String(c.chain ?? chain).toLowerCase(),
+                contractAddress: String(c.contractAddress ?? '').toLowerCase(),
+              }))
             } catch {
               return []
             }
           })
         )
 
-        const merged = results.flat()
+        const merged = dedupeCollections(results.flat())
 
-        // Sort: most items first
         merged.sort((a, b) => (b.tokenCount ?? 0) - (a.tokenCount ?? 0))
-
         setCollections(merged)
       } catch (e: any) {
         setErr(e?.message ?? 'Error')
@@ -121,7 +158,7 @@ export default function HomeClient() {
     }
 
     run()
-  }, [isConnected, address])
+  }, [isConnected, targetAddress])
 
   const emptyState = useMemo(() => {
     if (!isConnected) return 'Connect your wallet to view collectibles.'
@@ -131,62 +168,111 @@ export default function HomeClient() {
     return null
   }, [isConnected, loading, err, collections.length])
 
+  const onSearch = async () => {
+    const q = browseInput.trim()
+    if (!q) {
+      setBrowseAddress(null)
+      setBrowseStatus('')
+      return
+    }
+
+    setBrowseStatus('')
+    try {
+      const res = await fetch(`/api/resolve?q=${encodeURIComponent(q)}`, { cache: 'no-store' })
+      const json = await res.json()
+      if (!res.ok) {
+        setBrowseAddress(null)
+        setBrowseStatus('Not found')
+        return
+      }
+      setBrowseAddress(String(json.address || '').toLowerCase())
+      setBrowseStatus('')
+      // allow reload for new address
+      lastQueryKeyRef.current = ''
+    } catch {
+      setBrowseAddress(null)
+      setBrowseStatus('Not found')
+    }
+  }
+
   return (
-    <main
-      className="min-h-screen text-white"
-      style={{ backgroundColor: '#1b0736' }} // dark purple base
-    >
+    <main className="min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
       <div className="mx-auto max-w-md px-3 pb-24">
         {/* Sticky banner always visible */}
         <div className="sticky top-0 z-50 pt-3 pb-2" style={{ backgroundColor: '#1b0736' }}>
           <Marquee text={bannerText} />
         </div>
 
-        {/* Featured area (scrolls away) */}
+        {/* Top section (scrolls away) */}
         <section className="mt-2">
           <div className="rounded-3xl border border-white/10 bg-transparent p-3">
             <ConnectBar />
 
+            {/* Search other wallets */}
+            <div className="mt-3">
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={browseInput}
+                    onChange={(e) => setBrowseInput(e.target.value)}
+                    placeholder="Search: 0x… / ENS / farcaster username"
+                    className="
+                      flex-1 bg-transparent
+                      px-3 py-2 text-sm
+                      text-white placeholder:text-white/50
+                      outline-none
+                    "
+                  />
+                  <button
+                    type="button"
+                    onClick={onSearch}
+                    className="
+                      rounded-full px-4 py-2 text-xs font-semibold
+                      bg-white text-[#1b0736]
+                      active:scale-[0.98] transition
+                    "
+                  >
+                    Search
+                  </button>
+                </div>
+
+                {browseStatus ? (
+                  <div className="px-3 pt-2 text-xs text-white/70">{browseStatus}</div>
+                ) : browseAddress ? (
+                  <div className="px-3 pt-2 text-xs text-white/70">
+                    Browsing: {browseAddress}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
             {/* Featured miniapp promo */}
             <div className="mt-3">
               <button
-  type="button"
-  onClick={() => openUrl(FEATURED_MINIAPP_URL)}
-  className="
-    w-full overflow-hidden rounded-3xl border border-white/10
-    bg-transparent
-    active:scale-[0.99] transition
-    text-left
-  "
-  style={{ height: '25vh', minHeight: 160 }}
->
-  <div
-    className="relative h-full w-full"
-    style={{
-      backgroundImage: "url('/mintbanner.png')",
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-    }}
-  >
-    {/* Dark overlay for readability */}
-    <div className="absolute inset-0 bg-black/30" />
+                type="button"
+                onClick={() => openUrl(FEATURED_MINIAPP_URL)}
+                className="
+                  w-full overflow-hidden rounded-3xl border border-white/10
+                  bg-transparent
+                  active:scale-[0.99] transition
+                "
+                style={{ height: '25vh', minHeight: 160 }}
+              >
+                <div
+                  className="h-full w-full"
+                  style={{
+                    backgroundImage: "url('/mintbanner.png')",
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                />
+              </button>
 
-    {/* Text overlay */}
-    <div className="relative h-full w-full p-5 flex flex-col justify-end">
-      <div className="text-sm font-semibold text-white/90">
-        Featured Miniapp
-      </div>
-      <div className="mt-1 text-lg font-extrabold leading-tight text-white">
-        CryptoDickPunks Mint
-      </div>
-      <div className="mt-1 text-xs text-white/80">
-        Tap to open in Warpcast →
-      </div>
-    </div>
-  </div>
-</button>
+              {/* FEATURED TEXT PLACEHOLDER:
+                  Add a text overlay here later if you want (title/subtitle/call-to-action). */}
 
-
+              {/* FEATURED TEXT COLOR:
+                  When you add text later, change its color here (e.g. text-white / text-black / custom). */}
             </div>
           </div>
         </section>
@@ -201,13 +287,13 @@ export default function HomeClient() {
             <div className="grid grid-cols-2 gap-4">
               {collections.map((c) => (
                 <CollectionTile
-                  key={`${c.chain}:${c.contractAddress}`}
+                  key={`${String(c.chain).toLowerCase()}:${String(c.contractAddress).toLowerCase()}`}
                   c={{
                     ...c,
                     name: c.name ?? '',
                     tokenCount: c.tokenCount ?? 0,
-                    // chain passed through for routing
-                    chain: (c.chain ?? '').toLowerCase(),
+                    chain: String(c.chain).toLowerCase(),
+                    contractAddress: String(c.contractAddress).toLowerCase(),
                   }}
                 />
               ))}

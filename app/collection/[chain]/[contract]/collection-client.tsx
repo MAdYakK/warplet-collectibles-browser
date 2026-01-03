@@ -60,6 +60,9 @@ export default function CollectionClient() {
     return `${nfts.length} item${nfts.length === 1 ? '' : 's'}`
   }, [contract, isConnected, loading, err, nfts.length])
 
+  const pillBase =
+    'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]'
+
   return (
     <main className="mx-auto max-w-md min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
       <div
@@ -67,15 +70,13 @@ export default function CollectionClient() {
         style={{ backgroundColor: 'rgba(27, 7, 54, 0.85)' }}
       >
         <div className="p-3 flex items-center justify-between gap-3">
-          {/* Unified pill group: Back + Cards/Grid */}
           <div className="rounded-full border border-white/10 bg-white/5 p-1 flex items-center gap-1">
             <Link
               href="/"
-              className="
-                rounded-full px-3 py-2 text-xs font-semibold
-                text-white/90
-                active:scale-[0.98] transition
-              "
+              className={[
+                pillBase,
+                'text-white/90 hover:bg-white/5',
+              ].join(' ')}
             >
               Back
             </Link>
@@ -84,8 +85,8 @@ export default function CollectionClient() {
               type="button"
               onClick={() => setMode('cards')}
               className={[
-                'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]',
-                mode === 'cards' ? 'bg-white text-[#1b0736]' : 'text-white/90',
+                pillBase,
+                mode === 'cards' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5',
               ].join(' ')}
               aria-pressed={mode === 'cards'}
             >
@@ -96,8 +97,8 @@ export default function CollectionClient() {
               type="button"
               onClick={() => setMode('grid')}
               className={[
-                'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]',
-                mode === 'grid' ? 'bg-white text-[#1b0736]' : 'text-white/90',
+                pillBase,
+                mode === 'grid' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5',
               ].join(' ')}
               aria-pressed={mode === 'grid'}
             >
