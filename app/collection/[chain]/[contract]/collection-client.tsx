@@ -7,13 +7,15 @@ import { useAccount } from 'wagmi'
 import TokenCard from '../../../../components/TokenCard'
 import type { NftItem } from '../../../../lib/types'
 import useViewMode from '../../../../lib/useViewMode'
+import { useRouter } from 'next/navigation'
+
 
 type RouteParams = { chain?: string; contract?: string }
 
 export default function CollectionClient() {
   const params = useParams<RouteParams>()
   const { address, isConnected } = useAccount()
-
+  const router = useRouter()
   const chain = useMemo(() => String(params?.chain ?? '').toLowerCase(), [params?.chain])
   const contract = useMemo(() => String(params?.contract ?? '').toLowerCase(), [params?.contract])
 
@@ -71,15 +73,17 @@ export default function CollectionClient() {
       >
         <div className="p-3 flex items-center justify-between gap-3">
           <div className="rounded-full border border-white/10 bg-white/5 p-1 flex items-center gap-1">
-            <Link
-              href="/"
+            <button
+              type="button"
+              onClick={() => router.push('/')}
               className={[
                 pillBase,
                 'text-white/90 hover:bg-white/5',
               ].join(' ')}
             >
               Back
-            </Link>
+            </button>
+
 
             <button
               type="button"

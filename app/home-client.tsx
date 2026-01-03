@@ -217,10 +217,11 @@ export default function HomeClient() {
                     onChange={(e) => setBrowseInput(e.target.value)}
                     placeholder="Search: 0x… / ENS / farcaster username"
                     className="
-                      flex-1 bg-transparent
-                      px-3 py-2 text-sm
-                      text-white placeholder:text-white/50
-                      outline-none
+                    flex-1 bg-transparent
+                    px-3 py-2 text-sm
+                    text-white
+                    placeholder:text-white/50
+                    outline-none
                     "
                   />
                   <button
@@ -237,12 +238,15 @@ export default function HomeClient() {
                 </div>
 
                 {browseStatus ? (
-                  <div className="px-3 pt-2 text-xs text-white/70">{browseStatus}</div>
-                ) : browseAddress ? (
-                  <div className="px-3 pt-2 text-xs text-white/70">
-                    Browsing: {browseAddress}
-                  </div>
-                ) : null}
+                <div className="px-3 pt-2 text-xs text-white">
+                  {browseStatus}
+                </div>
+              ) : browseAddress ? (
+                <div className="px-3 pt-2 text-xs text-white">
+                  Browsing: {browseAddress}
+                </div>
+              ) : null}
+
               </div>
             </div>
 
