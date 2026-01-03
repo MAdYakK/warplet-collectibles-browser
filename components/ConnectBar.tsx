@@ -10,6 +10,13 @@ function isProbablyMiniApp() {
   return hasFarcasterGlobal || inIframe
 }
 
+function shortAddr(addr?: string) {
+  if (!addr) return ''
+  const a = addr.trim()
+  if (a.length <= 12) return a
+  return `${a.slice(0, 6)}…${a.slice(-4)}`
+}
+
 export default function ConnectBar({
   showMyWalletButton = false,
   onMyWallet,
@@ -17,7 +24,6 @@ export default function ConnectBar({
   showMyWalletButton?: boolean
   onMyWallet?: () => void
 }) {
-  // ConnectBar v2 (My Wallet support)
   const { isConnected, address } = useAccount()
   const { connect, connectors, isPending, error } = useConnect()
 
@@ -26,7 +32,6 @@ export default function ConnectBar({
   const primary =
     connectors.find((c) => c.ready) || (connectors.length ? connectors[0] : undefined)
 
-  // Auto-connect inside miniapp/preview once we have a connector
   useEffect(() => {
     if (!miniApp) return
     if (isConnected) return
@@ -44,51 +49,60 @@ export default function ConnectBar({
   })()
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-3xl border border-white/10 bg-transparent p-3">
-      <div className="min-w-0">
-        <div className="text-sm font-semibold text-white">Warplet Collectibles Browser</div>
-        <div className="text-xs text-white/80 truncate">
-          {isConnected ? `Connected: ${address}` : miniApp ? 'Connecting wallet…' : 'Not connected'}
+    <div className="rounded-3xl border border-white/10 bg-transparent p-3">
+      {/* Row 1: title + buttons (buttons never get pushed off) */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold text-white truncate">
+          Warplet Collectibles Browser
         </div>
-        {error ? <div className="mt-1 text-xs text-white">{error.message}</div> : null}
+
+        <div className="flex items-center gap-2 shrink-0">
+          {showMyWalletButton ? (
+            <button
+              type="button"
+              onClick={() => onMyWallet?.()}
+              className="
+                rounded-full px-4 py-2 text-xs font-semibold
+                border border-white/15 bg-white/5 text-white
+                active:scale-[0.98] transition
+              "
+              title="Return to your wallet"
+            >
+              My Wallet
+            </button>
+          ) : null}
+
+          {!isConnected ? (
+            <button
+              className="
+                rounded-full
+                bg-white text-[#1b0736]
+                px-4 py-2 text-xs font-semibold
+                active:scale-[0.98] transition
+              "
+              onClick={() => primary && connect({ connector: primary })}
+              disabled={isPending || (!primary && miniApp)}
+            >
+              {rightLabel}
+            </button>
+          ) : (
+            <div className="text-xs rounded-full bg-white text-[#1b0736] px-3 py-2 font-semibold">
+              Ready
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="shrink-0 flex items-center gap-2">
-        {/* ✅ ALWAYS show when requested */}
-        {showMyWalletButton ? (
-          <button
-            type="button"
-            onClick={() => onMyWallet?.()}
-            className="
-              rounded-full px-4 py-2 text-xs font-semibold
-              border border-white/15 bg-white/5 text-white
-              active:scale-[0.98] transition
-            "
-            title="Return to your wallet"
-          >
-            My Wallet
-          </button>
-        ) : null}
-
-        {!isConnected ? (
-          <button
-            className="
-              rounded-full
-              bg-white text-[#1b0736]
-              px-4 py-2 text-xs font-semibold
-              active:scale-[0.98] transition
-            "
-            onClick={() => primary && connect({ connector: primary })}
-            disabled={isPending || (!primary && miniApp)}
-          >
-            {rightLabel}
-          </button>
-        ) : (
-          <div className="text-xs rounded-full bg-white text-[#1b0736] px-3 py-2 font-semibold">
-            Ready
-          </div>
-        )}
+      {/* Row 2: status text (can be long, won’t affect buttons) */}
+      <div className="mt-1 text-xs text-white/80 truncate">
+        {isConnected
+          ? `Connected: ${shortAddr(address)}`
+          : miniApp
+          ? 'Connecting wallet…'
+          : 'Not connected'}
       </div>
+
+      {error ? <div className="mt-1 text-xs text-white">{error.message}</div> : null}
     </div>
   )
 }
