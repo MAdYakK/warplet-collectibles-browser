@@ -108,15 +108,28 @@ export default function HomeClient() {
     return BANNER_MESSAGES[Math.floor(Math.random() * BANNER_MESSAGES.length)]
   }, [])
 
-  // source of truth for browsing
   const addrParam = useMemo(() => {
     const q = (searchParams?.get('addr') || '').trim().toLowerCase()
     return q
   }, [searchParams])
 
-  const targetAddress = (addrParam || connectedAddress || '').toLowerCase()
+  const connectedLower = (connectedAddress || '').toLowerCase()
 
-  // prevent redundant fetch loops
+  // ✅ Only treat as browsing when it's actually a different wallet
+  const isBrowsingOther =
+    Boolean(addrParam) && Boolean(connectedLower) && addrParam !== connectedLower
+
+  const targetAddress = (isBrowsingOther ? addrParam : connectedLower) || ''
+
+  // ✅ If someone lands on /?addr=<your address>, clean it up
+  useEffect(() => {
+    if (!addrParam) return
+    if (!connectedLower) return
+    if (addrParam === connectedLower) {
+      router.replace('/')
+    }
+  }, [addrParam, connectedLower, router])
+
   const lastQueryKeyRef = useRef<string>('')
 
   // restore scroll per wallet
@@ -218,23 +231,20 @@ export default function HomeClient() {
     router.push('/')
   }
 
-  // ---------------------------
-  // Virtualization for collections grid (2 cols, window scroll)
-  // ---------------------------
+  // Virtualization for collections grid (2 cols)
   const gridRef = useRef<HTMLDivElement | null>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
 
-  // Recompute margin whenever the top content changes height significantly
   useLayoutEffect(() => {
     if (!gridRef.current) return
     setScrollMargin(gridRef.current.offsetTop)
-  }, [isConnected, addrParam, loading, err])
+  }, [isConnected, isBrowsingOther, loading, err])
 
   const rows = useMemo(() => Math.ceil(collections.length / 2), [collections.length])
 
   const gridVirtualizer = useWindowVirtualizer({
     count: rows,
-    estimateSize: () => 360, // guess; actual measured
+    estimateSize: () => 360,
     overscan: 8,
     scrollMargin,
   })
@@ -251,9 +261,11 @@ export default function HomeClient() {
 
         <section className="mt-2">
           <div className="rounded-3xl border border-white/10 bg-transparent p-3">
-            <ConnectBar showMyWalletButton={Boolean(addrParam)} onMyWallet={onMyWallet} />
+            <ConnectBar
+              showMyWalletButton={isBrowsingOther}
+              onMyWallet={onMyWallet}
+            />
 
-            {/* Search other wallets */}
             <div className="mt-3">
               <div
                 className="
@@ -298,14 +310,13 @@ export default function HomeClient() {
 
                   {browseStatus ? (
                     <div className="px-3 pt-2 text-xs text-white">{browseStatus}</div>
-                  ) : addrParam ? (
+                  ) : isBrowsingOther ? (
                     <div className="px-3 pt-2 text-xs text-white">Browsing: {addrParam}</div>
                   ) : null}
                 </div>
               </div>
             </div>
 
-            {/* Featured miniapp promo */}
             <div className="mt-3">
               <button
                 type="button"
@@ -333,7 +344,6 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* Collections grid (virtualized) */}
         <section className="mt-4" ref={gridRef}>
           {emptyState ? (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
