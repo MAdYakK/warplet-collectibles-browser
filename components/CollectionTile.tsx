@@ -29,14 +29,22 @@ export default function CollectionTile({
   const [imgFailed, setImgFailed] = useState(false)
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-transparent overflow-hidden">
+    <div
+      className="
+        rounded-[28px]
+        border border-white/10
+        bg-white/5
+        shadow-sm
+        overflow-hidden
+      "
+    >
       <Link
         href={`/collection/${c.chain}/${c.contractAddress}${addrKey ? `?addr=${encodeURIComponent(addrKey)}` : ''}`}
         className="block active:scale-[0.99] transition"
         onClick={() => saveHomeScroll(addrKey || 'connected')}
       >
         <div className="p-3">
-          <div className="rounded-3xl overflow-hidden border border-white/10 bg-white/5">
+          <div className="rounded-3xl overflow-hidden border border-white/10 bg-black/10">
             {c.image && !imgFailed ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -61,15 +69,16 @@ export default function CollectionTile({
               </div>
             )}
           </div>
+
+          {/* Rounded tinted info block */}
+          <div className="mt-3 rounded-2xl bg-[#a78bfa]/15 border border-white/10 px-3 py-2">
+            <div className="text-sm font-semibold text-white truncate">{c.name}</div>
+            <div className="mt-0.5 text-xs text-white/80">
+              {c.tokenCount} item{c.tokenCount === 1 ? '' : 's'}
+            </div>
+          </div>
         </div>
       </Link>
-
-      <div className="px-4 pb-4">
-        <div className="text-sm font-semibold truncate text-white">{c.name}</div>
-        <div className="mt-1 text-xs text-white">
-          {c.tokenCount} item{c.tokenCount === 1 ? '' : 's'}
-        </div>
-      </div>
     </div>
   )
 }

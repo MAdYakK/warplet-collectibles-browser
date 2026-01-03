@@ -3,6 +3,11 @@
 import { useEffect, useMemo } from 'react'
 import { useAccount, useConnect } from 'wagmi'
 
+function shortAddr(a?: string) {
+  if (!a) return ''
+  return `${a.slice(0, 6)}…${a.slice(-4)}`
+}
+
 function isProbablyMiniApp() {
   if (typeof window === 'undefined') return false
   const inIframe = window.self !== window.top
@@ -10,15 +15,8 @@ function isProbablyMiniApp() {
   return hasFarcasterGlobal || inIframe
 }
 
-function shortAddr(addr?: string) {
-  if (!addr) return ''
-  const a = addr.trim()
-  if (a.length <= 12) return a
-  return `${a.slice(0, 6)}…${a.slice(-4)}`
-}
-
 export default function ConnectBar({
-  showMyWalletButton = false,
+  showMyWalletButton,
   onMyWallet,
 }: {
   showMyWalletButton?: boolean
@@ -42,31 +40,35 @@ export default function ConnectBar({
   }, [miniApp, isConnected, primary?.id])
 
   const rightLabel = (() => {
-    if (isConnected) return 'Ready'
+    if (isConnected) return 'Connected'
     if (isPending) return 'Connecting…'
     if (!primary) return miniApp ? 'Loading…' : 'Open in Warpcast'
     return 'Connect'
   })()
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-transparent p-3">
-      {/* Row 1: title + buttons (buttons never get pushed off) */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-white truncate">
-          Warplet Collectibles Browser
+    <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur px-4 py-3 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] uppercase tracking-wider text-white/60">
+            Wallet
+          </div>
+          <div className="text-sm font-semibold text-white truncate">
+            {isConnected ? shortAddr(address) : miniApp ? 'Connecting…' : 'Not connected'}
+          </div>
+          {error ? <div className="mt-1 text-xs text-red-300">{error.message}</div> : null}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           {showMyWalletButton ? (
             <button
               type="button"
-              onClick={() => onMyWallet?.()}
+              onClick={onMyWallet}
               className="
                 rounded-full px-4 py-2 text-xs font-semibold
-                border border-white/15 bg-white/5 text-white
+                bg-white text-[#1b0736]
                 active:scale-[0.98] transition
               "
-              title="Return to your wallet"
             >
               My Wallet
             </button>
@@ -75,9 +77,8 @@ export default function ConnectBar({
           {!isConnected ? (
             <button
               className="
-                rounded-full
+                rounded-full px-4 py-2 text-xs font-semibold
                 bg-white text-[#1b0736]
-                px-4 py-2 text-xs font-semibold
                 active:scale-[0.98] transition
               "
               onClick={() => primary && connect({ connector: primary })}
@@ -86,23 +87,12 @@ export default function ConnectBar({
               {rightLabel}
             </button>
           ) : (
-            <div className="text-xs rounded-full bg-white text-[#1b0736] px-3 py-2 font-semibold">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold text-white/80">
               Ready
             </div>
           )}
         </div>
       </div>
-
-      {/* Row 2: status text (can be long, won’t affect buttons) */}
-      <div className="mt-1 text-xs text-white/80 truncate">
-        {isConnected
-          ? `Connected: ${shortAddr(address)}`
-          : miniApp
-          ? 'Connecting wallet…'
-          : 'Not connected'}
-      </div>
-
-      {error ? <div className="mt-1 text-xs text-white">{error.message}</div> : null}
     </div>
   )
 }

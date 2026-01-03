@@ -17,3 +17,12 @@ body {
   from { transform: translateX(0%); }
   to { transform: translateX(-33.333%); }
 }
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #1b0736;
+  color: white;
+}
