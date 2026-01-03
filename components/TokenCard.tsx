@@ -1,27 +1,7 @@
 'use client'
 
 import React, { useMemo, useRef, useState } from 'react'
-import { useAccount, useWriteContract } from 'wagmi'
-import { erc721Abi } from 'viem'
 import type { NftItem } from '../lib/types'
-import SendModal from './SendModal'
-
-// Minimal ERC-1155 ABI for safeTransferFrom
-const erc1155Abi = [
-  {
-    type: 'function',
-    name: 'safeTransferFrom',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'from', type: 'address' },
-      { name: 'to', type: 'address' },
-      { name: 'id', type: 'uint256' },
-      { name: 'amount', type: 'uint256' },
-      { name: 'data', type: 'bytes' },
-    ],
-    outputs: [],
-  },
-] as const
 
 function isFarcasterMiniApp(): boolean {
   if (typeof window === 'undefined') return false
@@ -52,17 +32,14 @@ export default function TokenCard({
   nft,
   variant = 'cards',
   disableActions = false,
+  onOpenSend,
 }: {
   nft: NftItem
   variant?: 'cards' | 'grid'
   disableActions?: boolean
+  onOpenSend?: (args: { nft: NftItem; anchorRect: AnchorRect | null; is1155: boolean; maxAmount: number }) => void
 }) {
-  const { address } = useAccount()
-  const { writeContractAsync } = useWriteContract()
-  const [sendOpen, setSendOpen] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
-  const [anchorRect, setAnchorRect] = useState<AnchorRect | null>(null)
-
   const cardRef = useRef<HTMLDivElement | null>(null)
 
   const osUrl = useMemo(
@@ -142,27 +119,18 @@ export default function TokenCard({
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             className={[buttonBase, disableActions ? disabledBtn : enabledBtn].join(' ')}
-            onClick={() => {
-  if (disableActions) return
-
-  // open first (so even if rect fails, modal still appears centered)
-  setSendOpen(true)
-
-  const rect = cardRef.current?.getBoundingClientRect()
-  if (rect) {
-    setAnchorRect({
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-    })
-  } else {
-    setAnchorRect(null)
-  }
-}}
-
             disabled={disableActions}
             type="button"
+            onClick={() => {
+              if (disableActions) return
+
+              const rect = cardRef.current?.getBoundingClientRect() ?? null
+              const anchorRect = rect
+                ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+                : null
+
+              onOpenSend?.({ nft, anchorRect, is1155, maxAmount: is1155 ? maxAmount : 1 })
+            }}
           >
             Send
           </button>
@@ -177,33 +145,6 @@ export default function TokenCard({
           </button>
         </div>
       </div>
-
-      <SendModal
-        open={sendOpen}
-        onClose={() => setSendOpen(false)}
-        title={`Send Token #${nft.tokenId}`}
-        maxAmount={is1155 ? maxAmount : 1}
-        anchorRect={anchorRect}
-        onConfirm={async (to, amount) => {
-          if (!address) throw new Error('Wallet not connected')
-
-          if (is1155) {
-            await writeContractAsync({
-              address: nft.contractAddress as `0x${string}`,
-              abi: erc1155Abi,
-              functionName: 'safeTransferFrom',
-              args: [address, to, BigInt(nft.tokenId), BigInt(amount), '0x'],
-            })
-          } else {
-            await writeContractAsync({
-              address: nft.contractAddress as `0x${string}`,
-              abi: erc721Abi,
-              functionName: 'safeTransferFrom',
-              args: [address, to, BigInt(nft.tokenId)],
-            })
-          }
-        }}
-      />
     </div>
   )
 }

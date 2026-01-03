@@ -3,21 +3,43 @@
 import useSWR from 'swr'
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { useAccount } from 'wagmi'
+import { useAccount, useWriteContract } from 'wagmi'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
+import { erc721Abi } from 'viem'
 
 import TokenCard from '../../../../components/TokenCard'
+import SendModal from '../../../../components/SendModal'
 import type { NftItem } from '../../../../lib/types'
 import useViewMode from '../../../../lib/useViewMode'
 
 type RouteParams = { chain?: string; contract?: string }
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
+// Minimal ERC-1155 ABI for safeTransferFrom
+const erc1155Abi = [
+  {
+    type: 'function',
+    name: 'safeTransferFrom',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'id', type: 'uint256' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'data', type: 'bytes' },
+    ],
+    outputs: [],
+  },
+] as const
+
+type AnchorRect = { top: number; left: number; width: number; height: number }
+
 export default function CollectionClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const params = useParams<RouteParams>()
   const { address: connectedAddress, isConnected } = useAccount()
+  const { writeContractAsync } = useWriteContract()
 
   const chain = useMemo(() => String(params?.chain ?? '').toLowerCase(), [params?.chain])
   const contract = useMemo(() => String(params?.contract ?? '').toLowerCase(), [params?.contract])
@@ -26,10 +48,7 @@ export default function CollectionClient() {
   const connectedLower = (connectedAddress || '').toLowerCase()
   const targetAddress = (browsedAddr || connectedLower || '').toLowerCase()
 
-  const disableActions =
-    Boolean(browsedAddr) &&
-    Boolean(connectedLower) &&
-    browsedAddr !== connectedLower
+  const disableActions = Boolean(browsedAddr) && Boolean(connectedLower) && browsedAddr !== connectedLower
 
   const { mode, setMode } = useViewMode({
     storageKey: 'warplet:collectionViewMode',
@@ -37,16 +56,12 @@ export default function CollectionClient() {
   })
 
   const tokensKey =
-    isConnected && targetAddress && contract
-      ? `warplet:tokens:${targetAddress}:${chain}:${contract}`
-      : null
+    isConnected && targetAddress && contract ? `warplet:tokens:${targetAddress}:${chain}:${contract}` : null
 
   const { data: nftsData, isLoading, error } = useSWR<NftItem[]>(
     tokensKey,
     async () => {
-      const json = await fetcher(
-        `/api/nfts/tokens?address=${targetAddress}&chain=${chain}&contract=${contract}`
-      )
+      const json = await fetcher(`/api/nfts/tokens?address=${targetAddress}&chain=${chain}&contract=${contract}`)
       return (json.nfts ?? []) as NftItem[]
     },
     { dedupingInterval: 60_000, revalidateOnFocus: false, keepPreviousData: true }
@@ -94,16 +109,27 @@ export default function CollectionClient() {
   const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
   const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
 
+  // ✅ GLOBAL Send modal state (survives virtualization)
+  const [sendOpen, setSendOpen] = useState(false)
+  const [sendNft, setSendNft] = useState<NftItem | null>(null)
+  const [sendAnchorRect, setSendAnchorRect] = useState<AnchorRect | null>(null)
+  const [sendIs1155, setSendIs1155] = useState(false)
+  const [sendMaxAmount, setSendMaxAmount] = useState(1)
+
+  const openSend = (args: { nft: NftItem; anchorRect: AnchorRect | null; is1155: boolean; maxAmount: number }) => {
+    setSendNft(args.nft)
+    setSendAnchorRect(args.anchorRect)
+    setSendIs1155(args.is1155)
+    setSendMaxAmount(Math.max(1, Math.floor(args.maxAmount || 1)))
+    setSendOpen(true)
+  }
+
   return (
     <main className="mx-auto max-w-md min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
-      <div
-        className="sticky top-0 z-40 backdrop-blur border-b border-white/10"
-        style={{ backgroundColor: 'rgba(27, 7, 54, 0.85)' }}
-      >
+      <div className="sticky top-0 z-40 backdrop-blur border-b border-white/10" style={{ backgroundColor: 'rgba(27, 7, 54, 0.85)' }}>
         <div className="p-3 flex items-center justify-between gap-3">
           {/* Buttons bubble */}
           <div className="rounded-full ring-1 ring-white/20 bg-white/10 p-1 flex items-center gap-1 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-
             <button
               type="button"
               onClick={() => router.push(browsedAddr ? `/?addr=${encodeURIComponent(browsedAddr)}` : '/')}
@@ -139,11 +165,7 @@ export default function CollectionClient() {
 
           {/* Status bubble */}
           <div className="rounded-2xl ring-1 ring-white/20 bg-white/10 px-3 py-2 text-right shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-
-            <div className="text-sm font-semibold truncate text-white">
-                Collection
-              </div>
-
+            <div className="text-sm font-semibold truncate text-white">Collection</div>
             <div className="text-xs text-white/80">{statusText}</div>
           </div>
         </div>
@@ -153,22 +175,18 @@ export default function CollectionClient() {
       <div ref={listRef} className="p-4 pb-24">
         {!isConnected ? (
           <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-
             Connect to view
           </div>
         ) : loading ? (
           <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-
             Loading…
           </div>
         ) : err ? (
           <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-
             {err}
           </div>
         ) : nfts.length === 0 ? (
           <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-
             No items found.
           </div>
         ) : (
@@ -196,8 +214,16 @@ export default function CollectionClient() {
                       }}
                       className="grid grid-cols-2 gap-3"
                     >
-                      {left ? <TokenCard nft={left} variant="grid" disableActions={disableActions} /> : <div />}
-                      {right ? <TokenCard nft={right} variant="grid" disableActions={disableActions} /> : <div />}
+                      {left ? (
+                        <TokenCard nft={left} variant="grid" disableActions={disableActions} onOpenSend={openSend} />
+                      ) : (
+                        <div />
+                      )}
+                      {right ? (
+                        <TokenCard nft={right} variant="grid" disableActions={disableActions} onOpenSend={openSend} />
+                      ) : (
+                        <div />
+                      )}
                     </div>
                   )
                 })}
@@ -220,7 +246,7 @@ export default function CollectionClient() {
                       }}
                       className="pb-5"
                     >
-                      <TokenCard nft={nft} variant="cards" disableActions={disableActions} />
+                      <TokenCard nft={nft} variant="cards" disableActions={disableActions} onOpenSend={openSend} />
                     </div>
                   )
                 })}
@@ -229,6 +255,35 @@ export default function CollectionClient() {
           </div>
         )}
       </div>
+
+      {/* ✅ ONE modal, always mounted outside virtualized rows */}
+      <SendModal
+        open={sendOpen}
+        onClose={() => setSendOpen(false)}
+        title={sendNft ? `Send Token #${sendNft.tokenId}` : 'Send'}
+        maxAmount={sendIs1155 ? sendMaxAmount : 1}
+        anchorRect={sendAnchorRect}
+        onConfirm={async (to, amount) => {
+          if (!connectedAddress) throw new Error('Wallet not connected')
+          if (!sendNft) throw new Error('Missing token')
+
+          if (sendIs1155) {
+            await writeContractAsync({
+              address: sendNft.contractAddress as `0x${string}`,
+              abi: erc1155Abi,
+              functionName: 'safeTransferFrom',
+              args: [connectedAddress, to, BigInt(sendNft.tokenId), BigInt(amount), '0x'],
+            })
+          } else {
+            await writeContractAsync({
+              address: sendNft.contractAddress as `0x${string}`,
+              abi: erc721Abi,
+              functionName: 'safeTransferFrom',
+              args: [connectedAddress, to, BigInt(sendNft.tokenId)],
+            })
+          }
+        }}
+      />
     </main>
   )
 }
