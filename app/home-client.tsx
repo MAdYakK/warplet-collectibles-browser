@@ -92,12 +92,11 @@ function dedupeCollections(list: CollectionSummary[]) {
 
 export default function HomeClient() {
   const router = useRouter()
-  const params = useSearchParams()
+  const searchParams = useSearchParams()
+  const { isConnected, address: connectedAddress } = useAccount()
 
-  const { isConnected, address } = useAccount()
-
+  // Search input only (NOT the source of truth for browsing)
   const [browseInput, setBrowseInput] = useState('')
-  const [browseAddress, setBrowseAddress] = useState<string | null>(null)
   const [browseStatus, setBrowseStatus] = useState<string>('')
 
   const [loading, setLoading] = useState(false)
@@ -108,25 +107,25 @@ export default function HomeClient() {
     return BANNER_MESSAGES[Math.floor(Math.random() * BANNER_MESSAGES.length)]
   }, [])
 
-  // Pull addr from URL if present (supports back navigation + sharing)
-  useEffect(() => {
-    const q = (params?.get('addr') || '').trim()
-    if (q) {
-      setBrowseAddress(q.toLowerCase())
-      setBrowseStatus('')
-      // Keep input blank (or you can show it; your choice)
-    } else {
-      setBrowseAddress(null)
-      setBrowseStatus('')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params?.get('addr')])
+  // ✅ Single source of truth for browsing:
+  const addrParam = useMemo(() => {
+    const q = (searchParams?.get('addr') || '').trim().toLowerCase()
+    return q
+  }, [searchParams])
 
-  const targetAddress = (browseAddress ?? address ?? '').toLowerCase()
+  const targetAddress = (addrParam || connectedAddress || '').toLowerCase()
+  const connectedLower = (connectedAddress || '').toLowerCase()
 
+  const isBrowsingOther =
+    Boolean(addrParam) &&
+    Boolean(connectedLower) &&
+    addrParam !== connectedLower
+
+
+  // Prevent redundant reloads (StrictMode/dev + param changes)
   const lastQueryKeyRef = useRef<string>('')
 
-  // Restore scroll per wallet after render
+  // Restore scroll per wallet AFTER targetAddress changes
   useEffect(() => {
     try {
       const key = `warplet:homeScroll:${targetAddress || 'connected'}`
@@ -134,13 +133,11 @@ export default function HomeClient() {
       if (saved) {
         const y = Number(saved)
         if (!Number.isNaN(y)) {
-          // restore once
           sessionStorage.removeItem(key)
           window.scrollTo(0, y)
         }
       }
     } catch {}
-    // restore when the target changes (browsing other wallets)
   }, [targetAddress])
 
   useEffect(() => {
@@ -158,9 +155,10 @@ export default function HomeClient() {
         const results = await Promise.all(
           CHAINS.map(async (chain) => {
             try {
-              const res = await fetch(`/api/nfts/collections?address=${targetAddress}&chain=${chain}`, {
-                cache: 'no-store',
-              })
+              const res = await fetch(
+                `/api/nfts/collections?address=${targetAddress}&chain=${chain}`,
+                { cache: 'no-store' }
+              )
               const json = await res.json()
               if (!res.ok) return []
               const cols = (json.collections ?? []) as CollectionSummary[]
@@ -198,39 +196,33 @@ export default function HomeClient() {
 
   const onSearch = async () => {
     const q = browseInput.trim()
-    if (!q) {
-      setBrowseAddress(null)
-      setBrowseStatus('')
-      router.push('/')
-      lastQueryKeyRef.current = ''
-      return
-    }
+    if (!q) return
 
     setBrowseStatus('')
     try {
       const res = await fetch(`/api/resolve?q=${encodeURIComponent(q)}`, { cache: 'no-store' })
       const json = await res.json()
       if (!res.ok || !json?.address) {
-        setBrowseAddress(null)
         setBrowseStatus('Not found')
         return
       }
       const resolved = String(json.address).toLowerCase()
-      setBrowseAddress(resolved)
-      setBrowseStatus('')
+
+      // allow refresh
       lastQueryKeyRef.current = ''
+      setBrowseStatus('')
+      setBrowseInput('')
+
       router.push(`/?addr=${encodeURIComponent(resolved)}`)
     } catch {
-      setBrowseAddress(null)
       setBrowseStatus('Not found')
     }
   }
 
   const onMyWallet = () => {
-    setBrowseInput('')
-    setBrowseStatus('')
-    setBrowseAddress(null)
     lastQueryKeyRef.current = ''
+    setBrowseStatus('')
+    setBrowseInput('')
     router.push('/')
   }
 
@@ -244,7 +236,7 @@ export default function HomeClient() {
         <section className="mt-2">
           <div className="rounded-3xl border border-white/10 bg-transparent p-3">
             <ConnectBar
-              showMyWalletButton={Boolean(browseAddress)}
+              showMyWalletButton={isBrowsingOther}
               onMyWallet={onMyWallet}
             />
 
@@ -294,9 +286,9 @@ export default function HomeClient() {
 
                   {browseStatus ? (
                     <div className="px-3 pt-2 text-xs text-white">{browseStatus}</div>
-                  ) : browseAddress ? (
+                  ) : addrParam ? (
                     <div className="px-3 pt-2 text-xs text-white">
-                      Browsing: {browseAddress}
+                      Browsing: {addrParam}
                     </div>
                   ) : null}
                 </div>
