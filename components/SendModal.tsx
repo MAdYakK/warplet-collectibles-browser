@@ -151,6 +151,9 @@ export default function SendModal({
             ) : null}
 
             {err ? <div className="text-xs text-white">{err}</div> : null}
+            <div className="relative w-[92vw] max-w-md max-h-[80vh] overflow-auto">
+              {/* Modal content goes here */}
+            </div>
 
             <div className="pt-1 flex gap-3">
               <button
