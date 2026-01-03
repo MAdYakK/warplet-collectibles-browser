@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { useAccount, useWriteContract } from 'wagmi'
 import { erc721Abi } from 'viem'
 import type { NftItem } from '../lib/types'
@@ -46,6 +46,8 @@ const openSeaAssetUrl = (chain: string, contractAddress: string, tokenId: string
 const SHARE_TEXT =
   'Shared from Warplet Collectibles Browser by @madyak! It is easy to view your NFTs now, check it out!'
 
+type AnchorRect = { top: number; left: number; width: number; height: number }
+
 export default function TokenCard({
   nft,
   variant = 'cards',
@@ -59,6 +61,9 @@ export default function TokenCard({
   const { writeContractAsync } = useWriteContract()
   const [sendOpen, setSendOpen] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
+  const [anchorRect, setAnchorRect] = useState<AnchorRect | null>(null)
+
+  const cardRef = useRef<HTMLDivElement | null>(null)
 
   const osUrl = useMemo(
     () => openSeaAssetUrl(String(nft.chain), nft.contractAddress, nft.tokenId),
@@ -90,7 +95,7 @@ export default function TokenCard({
     }
   }
 
-  // Determine quantity capability (ERC-1155 only)
+  // Quantity capability (ERC-1155 only)
   const tokenStd = String((nft as any).tokenStandard ?? '').toLowerCase()
   const is1155 = tokenStd.includes('1155')
   const rawAmount = (nft as any).amount ?? (nft as any).balance ?? 1
@@ -102,7 +107,7 @@ export default function TokenCard({
   const gapClass = variant === 'grid' ? 'space-y-2' : 'space-y-3'
 
   return (
-    <div className={gapClass}>
+    <div ref={cardRef} className={gapClass}>
       {/* IMAGE BUBBLE */}
       <button
         type="button"
@@ -137,8 +142,24 @@ export default function TokenCard({
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             className={[buttonBase, disableActions ? disabledBtn : enabledBtn].join(' ')}
-            onClick={() => setSendOpen(true)}
+            onClick={() => {
+              if (disableActions) return
+              // capture where this card is on screen so modal centers over it
+              const rect = cardRef.current?.getBoundingClientRect()
+              if (rect) {
+                setAnchorRect({
+                  top: rect.top,
+                  left: rect.left,
+                  width: rect.width,
+                  height: rect.height,
+                })
+              } else {
+                setAnchorRect(null)
+              }
+              setSendOpen(true)
+            }}
             disabled={disableActions}
+            type="button"
           >
             Send
           </button>
@@ -147,6 +168,7 @@ export default function TokenCard({
             className={[buttonBase, disableActions ? disabledBtn : enabledBtn].join(' ')}
             onClick={share}
             disabled={disableActions}
+            type="button"
           >
             Share
           </button>
@@ -158,11 +180,11 @@ export default function TokenCard({
         onClose={() => setSendOpen(false)}
         title={`Send Token #${nft.tokenId}`}
         maxAmount={is1155 ? maxAmount : 1}
+        anchorRect={anchorRect}
         onConfirm={async (to, amount) => {
           if (!address) throw new Error('Wallet not connected')
 
           if (is1155) {
-            // ERC-1155: safeTransferFrom(from, to, id, amount, data)
             await writeContractAsync({
               address: nft.contractAddress as `0x${string}`,
               abi: erc1155Abi,
@@ -170,7 +192,6 @@ export default function TokenCard({
               args: [address, to, BigInt(nft.tokenId), BigInt(amount), '0x'],
             })
           } else {
-            // ERC-721: safeTransferFrom(from, to, tokenId)
             await writeContractAsync({
               address: nft.contractAddress as `0x${string}`,
               abi: erc721Abi,
