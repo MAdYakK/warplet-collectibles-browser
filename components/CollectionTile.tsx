@@ -34,7 +34,7 @@ export default function CollectionTile({
 
   return (
     <div className="space-y-2">
-      {/* Image bubble (clickable) */}
+      {/* IMAGE BUBBLE (link) */}
       <Link
         href={href}
         className="block active:scale-[0.99] transition"
@@ -55,9 +55,7 @@ export default function CollectionTile({
           ) : (
             <div className="w-full aspect-square flex items-center justify-center bg-white/5">
               <div className="text-center px-3">
-                <div className="text-xs font-semibold text-white/90 truncate">
-                  {c.name || 'Collection'}
-                </div>
+                <div className="text-xs font-semibold text-white/90 truncate">{c.name || 'Collection'}</div>
                 <div className="mt-1 text-[11px] text-white/60">Image unavailable</div>
               </div>
             </div>
@@ -65,8 +63,8 @@ export default function CollectionTile({
         </div>
       </Link>
 
-      {/* Text bubble (NOT clickable) */}
-      <div className="rounded-2xl border border-white/10 bg-[#a78bfa]/15 px-3 py-2">
+      {/* TEXT BUBBLE (not link) */}
+      <div className="rounded-2xl border border-white/10 bg-[#a78bfa]/15 px-3 py-2 shadow-sm">
         <div className="text-sm font-semibold text-white truncate">{c.name}</div>
         <div className="mt-0.5 text-xs text-white/80">
           {c.tokenCount} item{c.tokenCount === 1 ? '' : 's'}

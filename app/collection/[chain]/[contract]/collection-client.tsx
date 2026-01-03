@@ -79,14 +79,14 @@ export default function CollectionClient() {
 
   const cardsVirtualizer = useWindowVirtualizer({
     count: nfts.length,
-    estimateSize: () => 590,
+    estimateSize: () => 620,
     overscan: 8,
     scrollMargin,
   })
 
   const gridVirtualizer = useWindowVirtualizer({
     count: gridRows,
-    estimateSize: () => 420,
+    estimateSize: () => 460,
     overscan: 8,
     scrollMargin,
   })
@@ -102,7 +102,7 @@ export default function CollectionClient() {
       >
         <div className="p-3 flex items-center justify-between gap-3">
           {/* Buttons bubble */}
-          <div className="rounded-full border border-white/10 bg-white/5 p-1 flex items-center gap-1">
+          <div className="rounded-full border border-white/10 bg-white/5 p-1 flex items-center gap-1 shadow-sm">
             <button
               type="button"
               onClick={() => router.push(browsedAddr ? `/?addr=${encodeURIComponent(browsedAddr)}` : '/')}
@@ -137,14 +137,17 @@ export default function CollectionClient() {
           </div>
 
           {/* Status bubble */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right">
-            <div className="text-sm font-semibold truncate text-white">{contract || 'Collection'}</div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right shadow-sm">
+            <div className="text-sm font-semibold truncate text-white">
+              {/* If you want, we can shorten this later */}
+              {contract || 'Collection'}
+            </div>
             <div className="text-xs text-white/80">{statusText}</div>
           </div>
         </div>
       </div>
 
-      {/* Add edge breathing room */}
+      {/* Edge padding so bubbles don't touch sides */}
       <div ref={listRef} className="p-4 pb-24">
         {!isConnected ? (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
@@ -170,7 +173,6 @@ export default function CollectionClient() {
                   const rowIndex = v.index
                   const leftIndex = rowIndex * 2
                   const rightIndex = leftIndex + 1
-
                   const left = nfts[leftIndex]
                   const right = nfts[rightIndex]
 
@@ -210,7 +212,7 @@ export default function CollectionClient() {
                         width: '100%',
                         transform: `translateY(${v.start - scrollMargin}px)`,
                       }}
-                      className="pb-4"
+                      className="pb-5"
                     >
                       <TokenCard nft={nft} variant="cards" disableActions={disableActions} />
                     </div>

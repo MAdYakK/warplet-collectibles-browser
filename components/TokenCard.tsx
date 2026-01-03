@@ -64,13 +64,17 @@ export default function TokenCard({
 
     if (isFarcasterMiniApp()) {
       const { sdk } = await import('@farcaster/miniapp-sdk')
+
       const embeds: [] | [string] | [string, string] =
         img && appUrl ? [img, appUrl] :
         img ? [img] :
         appUrl ? [appUrl] :
         []
 
-      await sdk.actions.composeCast({ text: SHARE_TEXT, embeds })
+      await sdk.actions.composeCast({
+        text: SHARE_TEXT,
+        embeds,
+      })
     } else {
       const msg = `${SHARE_TEXT}\n\n${appUrl || ''}`.trim()
       alert(`Open in Warpcast to share.\n\nCopy text:\n${msg}`)
@@ -81,9 +85,12 @@ export default function TokenCard({
   const enabledBtn = 'bg-white text-[#1b0736]'
   const disabledBtn = 'bg-white/20 text-white/50 cursor-not-allowed'
 
+  // Slightly tighter spacing in grid
+  const gapClass = variant === 'grid' ? 'space-y-2' : 'space-y-3'
+
   return (
-    <div className="space-y-2">
-      {/* Image bubble (clickable) */}
+    <div className={gapClass}>
+      {/* IMAGE BUBBLE (separate) */}
       <button
         type="button"
         className="block w-full text-left active:scale-[0.99] transition"
@@ -108,12 +115,11 @@ export default function TokenCard({
         </div>
       </button>
 
-      {/* Text + actions bubble */}
+      {/* INFO + ACTIONS BUBBLE (separate, purple) */}
       <div className="rounded-2xl border border-white/10 bg-[#a78bfa]/15 px-3 py-3 shadow-sm">
         <div className="text-sm font-semibold text-white truncate">
           {nft.name ?? `Token #${nft.tokenId}`}
         </div>
-        <div className="mt-1 text-[11px] text-white/75 truncate">{nft.contractAddress}</div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
