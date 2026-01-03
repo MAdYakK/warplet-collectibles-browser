@@ -1,29 +1,47 @@
 import { NextResponse } from 'next/server'
+import { createPublicClient, http, isAddress } from 'viem'
+import { mainnet } from 'viem/chains'
 
-function isHexAddress(s: string) {
-  return /^0x[a-fA-F0-9]{40}$/.test(s)
+const publicClient = createPublicClient({
+  chain: mainnet,
+  transport: http(), // viem default public RPC; you can swap to Alchemy/Infura later
+})
+
+function isLikelyEns(name: string) {
+  return name.toLowerCase().endsWith('.eth')
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const q = (searchParams.get('q') || '').trim()
+  const qRaw = (searchParams.get('q') || '').trim()
+  const q = qRaw.toLowerCase()
 
   if (!q) {
     return NextResponse.json({ error: 'Missing q' }, { status: 400 })
   }
 
-  // Direct address
-  if (isHexAddress(q)) {
+  // 1) Direct address
+  if (isAddress(q)) {
     return NextResponse.json({ address: q.toLowerCase() })
   }
 
-  // Try web3.bio Farcaster profile resolver (supports: address, fname, fid)
-  // Docs: https://api.web3.bio/profile/farcaster/{identity}
-  // We’ll try it for ENS too (many ENS names map to farcaster profiles / linked accounts).
+  // 2) ENS (.eth)
+  // This is the main missing piece for things like madyak.eth
+  if (isLikelyEns(q)) {
+    try {
+      const addr = await publicClient.getEnsAddress({ name: q })
+      if (addr) return NextResponse.json({ address: addr.toLowerCase() })
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    } catch {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+  }
+
+  // 3) Farcaster username / other identifiers via web3.bio
+  // (supports fname, fid, etc.)
   try {
-    const url = `https://api.web3.bio/profile/farcaster/${encodeURIComponent(q)}`
+    const url = `https://api.web3.bio/profile/farcaster/${encodeURIComponent(qRaw)}`
     const res = await fetch(url, {
-      // keep it fresh; avoids caching "not found" for too long
       cache: 'no-store',
       headers: { Accept: 'application/json' },
     })
@@ -34,19 +52,13 @@ export async function GET(req: Request) {
 
     const data: any = await res.json()
 
-    // Try common shapes:
-    // - data.address / data.owner
-    // - data.links.ethereum.address
-    // - data.addresses (array)
     const candidates: string[] = []
-
     const pushIfAddr = (v: any) => {
-      if (typeof v === 'string' && isHexAddress(v)) candidates.push(v.toLowerCase())
+      if (typeof v === 'string' && isAddress(v)) candidates.push(v.toLowerCase())
     }
 
     pushIfAddr(data?.address)
     pushIfAddr(data?.owner)
-
     pushIfAddr(data?.links?.ethereum?.address)
     pushIfAddr(data?.links?.eth?.address)
 
@@ -54,7 +66,6 @@ export async function GET(req: Request) {
       for (const a of data.addresses) pushIfAddr(a)
     }
 
-    // Some profiles have "accounts" arrays
     if (Array.isArray(data?.accounts)) {
       for (const acct of data.accounts) {
         pushIfAddr(acct?.address)

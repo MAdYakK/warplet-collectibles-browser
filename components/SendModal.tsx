@@ -54,17 +54,7 @@ export default function SendModal({
             <div className="text-xs text-white/70">Enter a recipient address</div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="
-              rounded-full px-3 py-2 text-xs font-semibold
-              border border-white/10 bg-white/5 text-white
-              active:scale-[0.98] transition
-            "
-          >
-            Close
-          </button>
+
         </div>
 
         <div className="p-4">

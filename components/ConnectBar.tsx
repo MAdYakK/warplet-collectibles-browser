@@ -52,15 +52,17 @@ export default function ConnectBar({
       </div>
 
       <div className="shrink-0 flex items-center gap-2">
-        {showMyWalletButton && isConnected ? (
+        {showMyWalletButton ? (
           <button
             type="button"
             onClick={onMyWallet}
-            className="
-              rounded-full px-4 py-2 text-xs font-semibold
-              border border-white/15 bg-white/5 text-white
-              active:scale-[0.98] transition
-            "
+            disabled={!isConnected}
+            className={[
+              'rounded-full px-4 py-2 text-xs font-semibold border active:scale-[0.98] transition',
+              isConnected
+                ? 'border border-white/15 bg-white/5 text-white'
+                : 'border border-white/10 bg-white/5 text-white/40 cursor-not-allowed',
+            ].join(' ')}
           >
             My Wallet
           </button>

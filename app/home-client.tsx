@@ -236,7 +236,7 @@ export default function HomeClient() {
         <section className="mt-2">
           <div className="rounded-3xl border border-white/10 bg-transparent p-3">
             <ConnectBar
-              showMyWalletButton={isBrowsingOther}
+              showMyWalletButton={Boolean(addrParam)} // show anytime we're in browse mode
               onMyWallet={onMyWallet}
             />
 
