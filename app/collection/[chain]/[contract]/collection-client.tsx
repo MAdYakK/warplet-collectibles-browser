@@ -1,8 +1,11 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useAccount } from 'wagmi'
+import { useWindowVirtualizer } from '@tanstack/react-virtual'
+
+
 import TokenCard from '../../../../components/TokenCard'
 import type { NftItem } from '../../../../lib/types'
 import useViewMode from '../../../../lib/useViewMode'
@@ -26,8 +29,13 @@ export default function CollectionClient() {
   const browsedAddr = (searchParams?.get('addr') || '').trim().toLowerCase()
   const targetAddress = (browsedAddr || connectedAddress || '').toLowerCase()
 
+  const connectedLower = (connectedAddress || '').toLowerCase()
+
   const disableActions =
-    Boolean(browsedAddr) && Boolean(connectedAddress) && browsedAddr !== connectedAddress?.toLowerCase()
+    Boolean(browsedAddr) &&
+    Boolean(connectedLower) &&
+    browsedAddr !== connectedLower
+
 
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -75,6 +83,39 @@ export default function CollectionClient() {
   const pillBase =
     'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]'
 
+  // ---------------------------
+  // Virtualization (window scroll)
+  // ---------------------------
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const [scrollMargin, setScrollMargin] = useState(0)
+
+  useLayoutEffect(() => {
+    if (!listRef.current) return
+    // offsetTop = distance from top of page; used so virtualizer positions correctly
+    setScrollMargin(listRef.current.offsetTop)
+  }, [mode])
+
+  // For grid: render rows of 2
+  const gridRows = useMemo(() => Math.ceil(nfts.length / 2), [nfts.length])
+
+  const cardsVirtualizer = useWindowVirtualizer({
+  count: nfts.length,
+  estimateSize: () => 560, // guess; measured
+  overscan: 8,
+  scrollMargin,
+})
+
+const gridVirtualizer = useWindowVirtualizer({
+  count: gridRows,
+  estimateSize: () => 360, // guess; measured
+  overscan: 8,
+  scrollMargin,
+})
+
+
+  const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
+  const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
+
   return (
     <main className="mx-auto max-w-md min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
       <div
@@ -118,7 +159,6 @@ export default function CollectionClient() {
 
           <div className="min-w-0 text-right">
             <div className="flex items-center justify-end gap-2">
-              {/* Browsing chip */}
               {disableActions ? (
                 <div className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/90">
                   Browsing {shortAddr(targetAddress)}
@@ -135,28 +175,107 @@ export default function CollectionClient() {
         </div>
       </div>
 
-      <div className="p-3 pb-24">
-        {mode === 'grid' ? (
-          <div className="grid grid-cols-2 gap-4">
-            {nfts.map((nft) => (
-              <TokenCard
-                key={`${nft.contractAddress}:${nft.tokenId}`}
-                nft={nft}
-                variant="grid"
-                disableActions={disableActions}
-              />
-            ))}
+      {/* listRef: used to compute scrollMargin so window-virtualization aligns below header */}
+      <div ref={listRef} className="p-3 pb-24">
+        {/* Empty/Loading */}
+        {!isConnected ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+            Connect to view
+          </div>
+        ) : loading ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+            Loading…
+          </div>
+        ) : err ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+            {err}
+          </div>
+        ) : nfts.length === 0 ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+            No items found.
           </div>
         ) : (
-          <div className="space-y-4">
-            {nfts.map((nft) => (
-              <TokenCard
-                key={`${nft.contractAddress}:${nft.tokenId}`}
-                nft={nft}
-                variant="cards"
-                disableActions={disableActions}
-              />
-            ))}
+          // Virtualized container
+          <div
+            style={{
+              height: `${totalSize}px`,
+              position: 'relative',
+            }}
+          >
+            {mode === 'grid' ? (
+              <>
+                {items.map((v) => {
+                  const rowIndex = v.index
+                  const leftIndex = rowIndex * 2
+                  const rightIndex = leftIndex + 1
+                  const left = nfts[leftIndex]
+                  const right = nfts[rightIndex]
+
+                  return (
+                    <div
+                      key={v.key}
+                      data-index={v.index}
+                      ref={gridVirtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${v.start - scrollMargin}px)`,
+                      }}
+                      className="grid grid-cols-2 gap-4"
+                    >
+                      {left ? (
+                        <TokenCard
+                          nft={left}
+                          variant="grid"
+                          disableActions={disableActions}
+                        />
+                      ) : (
+                        <div />
+                      )}
+
+                      {right ? (
+                        <TokenCard
+                          nft={right}
+                          variant="grid"
+                          disableActions={disableActions}
+                        />
+                      ) : (
+                        <div />
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            ) : (
+              <>
+                {items.map((v) => {
+                  const nft = nfts[v.index]
+                  return (
+                    <div
+                      key={v.key}
+                      data-index={v.index}
+                      ref={cardsVirtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${v.start - scrollMargin}px)`,
+                      }}
+                      className="pb-4"
+                    >
+                      <TokenCard
+                        nft={nft}
+                        variant="cards"
+                        disableActions={disableActions}
+                      />
+                    </div>
+                  )
+                })}
+              </>
+            )}
           </div>
         )}
       </div>

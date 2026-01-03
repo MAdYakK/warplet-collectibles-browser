@@ -1,9 +1,11 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useWindowVirtualizer } from '@tanstack/react-virtual'
+
 import ConnectBar from '../components/ConnectBar'
 import CollectionTile from '../components/CollectionTile'
 
@@ -95,7 +97,6 @@ export default function HomeClient() {
   const searchParams = useSearchParams()
   const { isConnected, address: connectedAddress } = useAccount()
 
-  // Search input only (NOT the source of truth for browsing)
   const [browseInput, setBrowseInput] = useState('')
   const [browseStatus, setBrowseStatus] = useState<string>('')
 
@@ -107,25 +108,18 @@ export default function HomeClient() {
     return BANNER_MESSAGES[Math.floor(Math.random() * BANNER_MESSAGES.length)]
   }, [])
 
-  // ✅ Single source of truth for browsing:
+  // source of truth for browsing
   const addrParam = useMemo(() => {
     const q = (searchParams?.get('addr') || '').trim().toLowerCase()
     return q
   }, [searchParams])
 
   const targetAddress = (addrParam || connectedAddress || '').toLowerCase()
-  const connectedLower = (connectedAddress || '').toLowerCase()
 
-  const isBrowsingOther =
-    Boolean(addrParam) &&
-    Boolean(connectedLower) &&
-    addrParam !== connectedLower
-
-
-  // Prevent redundant reloads (StrictMode/dev + param changes)
+  // prevent redundant fetch loops
   const lastQueryKeyRef = useRef<string>('')
 
-  // Restore scroll per wallet AFTER targetAddress changes
+  // restore scroll per wallet
   useEffect(() => {
     try {
       const key = `warplet:homeScroll:${targetAddress || 'connected'}`
@@ -208,11 +202,9 @@ export default function HomeClient() {
       }
       const resolved = String(json.address).toLowerCase()
 
-      // allow refresh
       lastQueryKeyRef.current = ''
       setBrowseStatus('')
       setBrowseInput('')
-
       router.push(`/?addr=${encodeURIComponent(resolved)}`)
     } catch {
       setBrowseStatus('Not found')
@@ -226,6 +218,30 @@ export default function HomeClient() {
     router.push('/')
   }
 
+  // ---------------------------
+  // Virtualization for collections grid (2 cols, window scroll)
+  // ---------------------------
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  const [scrollMargin, setScrollMargin] = useState(0)
+
+  // Recompute margin whenever the top content changes height significantly
+  useLayoutEffect(() => {
+    if (!gridRef.current) return
+    setScrollMargin(gridRef.current.offsetTop)
+  }, [isConnected, addrParam, loading, err])
+
+  const rows = useMemo(() => Math.ceil(collections.length / 2), [collections.length])
+
+  const gridVirtualizer = useWindowVirtualizer({
+    count: rows,
+    estimateSize: () => 360, // guess; actual measured
+    overscan: 8,
+    scrollMargin,
+  })
+
+  const vRows = gridVirtualizer.getVirtualItems()
+  const totalSize = gridVirtualizer.getTotalSize()
+
   return (
     <main className="min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
       <div className="mx-auto max-w-md px-3 pb-24">
@@ -235,10 +251,7 @@ export default function HomeClient() {
 
         <section className="mt-2">
           <div className="rounded-3xl border border-white/10 bg-transparent p-3">
-            <ConnectBar
-              showMyWalletButton={Boolean(addrParam)} // show anytime we're in browse mode
-              onMyWallet={onMyWallet}
-            />
+            <ConnectBar showMyWalletButton={Boolean(addrParam)} onMyWallet={onMyWallet} />
 
             {/* Search other wallets */}
             <div className="mt-3">
@@ -249,7 +262,6 @@ export default function HomeClient() {
                   transition
                 "
               >
-                {/* Animated focus ring: subtle pulse while focused */}
                 <div className="focus-within:animate-[pulse_1.4s_ease-in-out_infinite]">
                   <div className="flex items-center gap-2">
                     <input
@@ -287,9 +299,7 @@ export default function HomeClient() {
                   {browseStatus ? (
                     <div className="px-3 pt-2 text-xs text-white">{browseStatus}</div>
                   ) : addrParam ? (
-                    <div className="px-3 pt-2 text-xs text-white">
-                      Browsing: {addrParam}
-                    </div>
+                    <div className="px-3 pt-2 text-xs text-white">Browsing: {addrParam}</div>
                   ) : null}
                 </div>
               </div>
@@ -317,35 +327,74 @@ export default function HomeClient() {
                 />
               </button>
 
-              {/* FEATURED TEXT PLACEHOLDER:
-                  Add a text overlay here later if you want (title/subtitle/call-to-action). */}
-
-              {/* FEATURED TEXT COLOR:
-                  When you add text later, change its color here (e.g. text-white / text-black / custom). */}
+              {/* FEATURED TEXT PLACEHOLDER: add overlay text here later */}
+              {/* FEATURED TEXT COLOR: change classes here later */}
             </div>
           </div>
         </section>
 
-        <section className="mt-4">
+        {/* Collections grid (virtualized) */}
+        <section className="mt-4" ref={gridRef}>
           {emptyState ? (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
               {emptyState}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
-              {collections.map((c) => (
-                <CollectionTile
-                  key={`${String(c.chain).toLowerCase()}:${String(c.contractAddress).toLowerCase()}`}
-                  browseAddr={targetAddress}
-                  c={{
-                    ...c,
-                    name: c.name ?? '',
-                    tokenCount: c.tokenCount ?? 0,
-                    chain: String(c.chain).toLowerCase(),
-                    contractAddress: String(c.contractAddress).toLowerCase(),
-                  }}
-                />
-              ))}
+            <div style={{ height: `${totalSize}px`, position: 'relative' }}>
+              {vRows.map((v) => {
+                const rowIndex = v.index
+                const leftIndex = rowIndex * 2
+                const rightIndex = leftIndex + 1
+
+                const left = collections[leftIndex]
+                const right = collections[rightIndex]
+
+                return (
+                  <div
+                    key={v.key}
+                    data-index={v.index}
+                    ref={gridVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${v.start - scrollMargin}px)`,
+                    }}
+                    className="grid grid-cols-2 gap-4"
+                  >
+                    {left ? (
+                      <CollectionTile
+                        browseAddr={targetAddress}
+                        c={{
+                          ...left,
+                          name: left.name ?? '',
+                          tokenCount: left.tokenCount ?? 0,
+                          chain: String(left.chain).toLowerCase(),
+                          contractAddress: String(left.contractAddress).toLowerCase(),
+                        }}
+                      />
+                    ) : (
+                      <div />
+                    )}
+
+                    {right ? (
+                      <CollectionTile
+                        browseAddr={targetAddress}
+                        c={{
+                          ...right,
+                          name: right.name ?? '',
+                          tokenCount: right.tokenCount ?? 0,
+                          chain: String(right.chain).toLowerCase(),
+                          contractAddress: String(right.contractAddress).toLowerCase(),
+                        }}
+                      />
+                    ) : (
+                      <div />
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </section>

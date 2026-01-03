@@ -10,7 +10,6 @@ type CollectionSummary = {
   tokenCount: number
 }
 
-// Save scroll position per “browsed wallet”
 function saveHomeScroll(addrKey: string) {
   try {
     const y = typeof window !== 'undefined' ? window.scrollY : 0
@@ -43,6 +42,8 @@ export default function CollectionTile({
                 alt={c.name}
                 className="w-full aspect-square object-cover block"
                 loading="lazy"
+                decoding="async"
+                fetchPriority="low"
               />
             ) : (
               <div className="w-full aspect-square flex items-center justify-center text-xs text-white/70">

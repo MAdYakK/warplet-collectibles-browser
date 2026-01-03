@@ -91,24 +91,29 @@ export default function TokenCard({ nft, variant = 'cards', disableActions = fal
     setSendOpen(true)
   }
 
+  const ImgEl = () =>
+    img ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={img}
+        alt={nft.name ?? `#${nft.tokenId}`}
+        className={variant === 'grid' ? 'w-full aspect-square object-cover block' : 'w-full h-auto block'}
+        loading="lazy"
+        decoding="async"
+        fetchPriority="low"
+      />
+    ) : (
+      <div className="w-full aspect-square flex items-center justify-center text-sm text-white/70">
+        No image
+      </div>
+    )
+
   if (variant === 'grid') {
     return (
       <div className={shell}>
         <button className="block w-full" onClick={() => openUrl(osUrl)}>
           <div className={imageWrap}>
-            {img ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={img}
-                alt={nft.name ?? `#${nft.tokenId}`}
-                className="w-full aspect-square object-cover block"
-                loading="lazy"
-              />
-            ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-xs text-white/70">
-                No image
-              </div>
-            )}
+            <ImgEl />
           </div>
         </button>
 
@@ -168,14 +173,7 @@ export default function TokenCard({ nft, variant = 'cards', disableActions = fal
       <button className="block w-full" onClick={() => openUrl(osUrl)}>
         <div className="px-2 pt-2">
           <div className={imageWrap}>
-            {img ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={img} alt={nft.name ?? `#${nft.tokenId}`} className="w-full h-auto block" />
-            ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-sm text-white/70">
-                No image
-              </div>
-            )}
+            <ImgEl />
           </div>
         </div>
       </button>
