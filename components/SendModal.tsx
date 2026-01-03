@@ -1,74 +1,68 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export default function SendModal({
   open,
   onClose,
   title,
   onConfirm,
+  maxAmount = 1,
 }: {
   open: boolean
   onClose: () => void
   title: string
-  onConfirm: (to: `0x${string}`) => Promise<void>
+  onConfirm: (to: `0x${string}`, amount: number) => Promise<void>
+  maxAmount?: number
 }) {
+  const [mounted, setMounted] = useState(false)
   const [to, setTo] = useState('')
+  const [amountStr, setAmountStr] = useState('1')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const canSubmit = useMemo(() => /^0x[a-fA-F0-9]{40}$/.test(to.trim()), [to])
+  useEffect(() => setMounted(true), [])
+
+  const max = Math.max(1, Math.floor(Number(maxAmount || 1)))
 
   useEffect(() => {
     if (!open) return
     setTo('')
     setErr(null)
     setBusy(false)
+    setAmountStr('1')
   }, [open])
 
-  if (!open) return null
+  const canSubmitAddr = useMemo(() => /^0x[a-fA-F0-9]{40}$/.test(to.trim()), [to])
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center px-3 pb-6">
-      {/* backdrop */}
-      <button
-        aria-label="Close"
-        className="absolute inset-0 bg-black/60"
-        onClick={onClose}
-      />
+  const amount = useMemo(() => {
+    const n = Number(amountStr)
+    if (!Number.isFinite(n)) return 1
+    return Math.max(1, Math.min(max, Math.floor(n)))
+  }, [amountStr, max])
 
-      {/* modal */}
-      <div
-        className="
-          relative w-full max-w-md
-          rounded-3xl border border-white/10
-          bg-[#1b0736]
-          text-white
-          shadow-2xl
-          overflow-hidden
-        "
-      >
-        <div className="p-4 flex items-center justify-between gap-3 border-b border-white/10">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold truncate">{title}</div>
-            <div className="text-xs text-white/70">Enter a recipient address</div>
-          </div>
+  const canSubmit = canSubmitAddr && !busy && amount >= 1 && amount <= max
 
+  if (!open || !mounted) return null
 
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+      <button aria-label="Close" className="absolute inset-0 bg-black/70" onClick={onClose} />
+
+      <div className="relative w-full max-w-md rounded-3xl border border-white/20 bg-[#1b0736] text-white shadow-[0_25px_80px_rgba(0,0,0,0.65)] overflow-hidden">
+        <div className="p-4 border-b border-white/10">
+          <div className="text-sm font-semibold truncate">{title}</div>
+          <div className="mt-1 text-xs text-white/70">Enter a recipient address</div>
         </div>
 
-        <div className="p-4">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-2">
+        <div className="p-4 space-y-3">
+          <div className="rounded-2xl border border-white/15 bg-white/10 p-2">
             <input
               value={to}
               onChange={(e) => setTo(e.target.value)}
               placeholder="0x…"
-              className="
-                w-full bg-transparent
-                px-3 py-2 text-sm
-                text-white placeholder:text-white/50
-                outline-none
-              "
+              className="w-full bg-transparent px-3 py-2 text-sm text-white placeholder:text-white/50 outline-none"
               style={{ color: '#ffffff', caretColor: '#ffffff' }}
               autoCapitalize="none"
               autoCorrect="off"
@@ -76,17 +70,50 @@ export default function SendModal({
             />
           </div>
 
-          {err ? <div className="mt-2 text-xs text-white">{err}</div> : null}
+          {max > 1 ? (
+            <div className="rounded-2xl border border-white/15 bg-white/10 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold text-white/90">Quantity</div>
+                <div className="text-[11px] text-white/70">Max: {max}</div>
+              </div>
 
-          <div className="mt-4 flex gap-3">
+              <div className="mt-2 flex items-center gap-2">
+                <select
+                  className="rounded-full border border-white/20 bg-white/10 px-3 py-2 text-xs text-white outline-none"
+                  value={String(amount)}
+                  onChange={(e) => setAmountStr(e.target.value)}
+                >
+                  {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n} className="text-black">
+                      {n}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={amountStr}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^\d]/g, '')
+                    setAmountStr(v || '1')
+                  }}
+                  className="flex-1 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white outline-none placeholder:text-white/40"
+                  style={{ color: '#ffffff', caretColor: '#ffffff' }}
+                />
+              </div>
+
+              <div className="mt-2 text-[11px] text-white/70">Choose a value from 1 to {max}.</div>
+            </div>
+          ) : null}
+
+          {err ? <div className="text-xs text-white">{err}</div> : null}
+
+          <div className="pt-1 flex gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="
-                flex-1 rounded-full px-4 py-3 text-sm font-semibold
-                border border-white/10 bg-white/5 text-white
-                active:scale-[0.98] transition
-              "
+              className="flex-1 rounded-full px-4 py-3 text-sm font-semibold border border-white/20 bg-white/10 text-white active:scale-[0.98] transition"
               disabled={busy}
             >
               Cancel
@@ -95,14 +122,19 @@ export default function SendModal({
             <button
               type="button"
               onClick={async () => {
-                if (!canSubmit) {
+                if (!canSubmitAddr) {
                   setErr('Please enter a valid 0x address.')
                   return
                 }
+                if (amount < 1 || amount > max) {
+                  setErr(`Quantity must be between 1 and ${max}.`)
+                  return
+                }
+
                 setErr(null)
                 setBusy(true)
                 try {
-                  await onConfirm(to.trim().toLowerCase() as `0x${string}`)
+                  await onConfirm(to.trim().toLowerCase() as `0x${string}`, amount)
                   onClose()
                 } catch (e: any) {
                   setErr(e?.message ?? 'Transaction failed')
@@ -112,17 +144,16 @@ export default function SendModal({
               }}
               className={[
                 'flex-1 rounded-full px-4 py-3 text-sm font-semibold active:scale-[0.98] transition',
-                canSubmit && !busy
-                  ? 'bg-white text-[#1b0736]'
-                  : 'bg-white/20 text-white/60 cursor-not-allowed',
+                canSubmit ? 'bg-white text-[#1b0736]' : 'bg-white/25 text-white/60 cursor-not-allowed',
               ].join(' ')}
-              disabled={!canSubmit || busy}
+              disabled={!canSubmit}
             >
               {busy ? 'Sending…' : 'Send'}
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
