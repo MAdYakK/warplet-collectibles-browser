@@ -1,6 +1,6 @@
 'use client'
 
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useAccount, useWriteContract } from 'wagmi'
@@ -40,6 +40,7 @@ export default function CollectionClient() {
   const params = useParams<RouteParams>()
   const { address: connectedAddress, isConnected } = useAccount()
   const { writeContractAsync } = useWriteContract()
+  const { mutate } = useSWRConfig()
 
   const chain = useMemo(() => String(params?.chain ?? '').toLowerCase(), [params?.chain])
   const contract = useMemo(() => String(params?.contract ?? '').toLowerCase(), [params?.contract])
@@ -109,7 +110,7 @@ export default function CollectionClient() {
   const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
   const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
 
-  // Global modal state (cannot be eaten by virtualization)
+  // Global modal state
   const [sendOpen, setSendOpen] = useState(false)
   const [sendNft, setSendNft] = useState<NftItem | null>(null)
   const [sendAnchorRect, setSendAnchorRect] = useState<AnchorRect | null>(null)
@@ -122,6 +123,47 @@ export default function CollectionClient() {
     setSendIs1155(args.is1155)
     setSendMaxAmount(Math.max(1, Math.floor(args.maxAmount || 1)))
     setSendOpen(true)
+  }
+
+  // Helper for optimistic cache update after send
+  const optimisticAfterSend = async (sent: NftItem, amountSent: number, is1155: boolean) => {
+    if (!tokensKey) return
+
+    // Optimistic update first
+    await mutate(
+      tokensKey,
+      (current?: NftItem[]) => {
+        if (!current) return current
+
+        const match = (x: NftItem) =>
+          x.contractAddress.toLowerCase() === sent.contractAddress.toLowerCase() && String(x.tokenId) === String(sent.tokenId)
+
+        if (!is1155) {
+          // ERC-721: remove token
+          return current.filter((x) => !match(x))
+        }
+
+        // ERC-1155: decrement balance/amount if present
+        return current
+          .map((x) => {
+            if (!match(x)) return x
+
+            const raw = (x as any).amount ?? (x as any).balance ?? 1
+            const cur = Number(raw) || 1
+            const next = cur - amountSent
+
+            if (next <= 0) return null as any
+
+            // preserve shape but update common fields
+            const updated: any = { ...x }
+            if ((x as any).amount != null) updated.amount = next
+            if ((x as any).balance != null) updated.balance = next
+            return updated as NftItem
+          })
+          .filter(Boolean) as NftItem[]
+      },
+      { revalidate: true }
+    )
   }
 
   return (
@@ -174,7 +216,6 @@ export default function CollectionClient() {
         </div>
       </div>
 
-      {/* Edge padding so bubbles don't touch sides */}
       <div ref={listRef} className="p-4 pb-24">
         {!isConnected ? (
           <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
@@ -270,6 +311,7 @@ export default function CollectionClient() {
           if (!connectedAddress) throw new Error('Wallet not connected')
           if (!sendNft) throw new Error('Missing token')
 
+          // Perform transfer
           if (sendIs1155) {
             await writeContractAsync({
               address: sendNft.contractAddress as `0x${string}`,
@@ -285,6 +327,9 @@ export default function CollectionClient() {
               args: [connectedAddress, to, BigInt(sendNft.tokenId)],
             })
           }
+
+          // Refresh list so the sent item disappears / balance updates
+          await optimisticAfterSend(sendNft, amount, sendIs1155)
         }}
       />
     </main>
