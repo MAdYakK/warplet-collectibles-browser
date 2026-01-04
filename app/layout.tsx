@@ -18,11 +18,15 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={roboto.className}>
-      <body>
+      <body className="overflow-x-hidden">
+        {/* Providers can keep doing whatever they do */}
         <Providers>
           <MiniAppReady />
           {children}
         </Providers>
+
+        {/* ✅ This lives OUTSIDE Providers so it can't be clipped */}
+        <div id="modal-root" />
       </body>
     </html>
   )

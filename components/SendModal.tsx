@@ -11,7 +11,7 @@ export default function SendModal({
   onClose,
   title,
   maxAmount = 1,
-  anchorRect, // currently unused (kept for future animation)
+  anchorRect, // kept for later; not needed to show modal
   onConfirm,
 }: {
   open: boolean
@@ -21,16 +21,11 @@ export default function SendModal({
   anchorRect?: AnchorRect | null
   onConfirm: (to: `0x${string}`, amount: number) => Promise<void> | void
 }) {
-  const [mounted, setMounted] = useState(false)
   const [to, setTo] = useState('')
   const [amount, setAmount] = useState(1)
   const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string>('')
+  const [err, setErr] = useState('')
 
-  // Ensure portal mount only on client
-  useEffect(() => setMounted(true), [])
-
-  // Reset when opening
   useEffect(() => {
     if (!open) return
     setTo('')
@@ -39,7 +34,6 @@ export default function SendModal({
     setErr('')
   }, [open])
 
-  // Escape to close
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
@@ -50,18 +44,20 @@ export default function SendModal({
   }, [open, onClose])
 
   const showAmount = (maxAmount ?? 1) > 1
-
   const toNormalized = useMemo(() => to.trim(), [to])
 
-  if (!open || !mounted) return null
+  if (!open) return null
   if (typeof document === 'undefined') return null
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[2147483647]"
-      aria-modal="true"
-      role="dialog"
-    >
+  const mount = document.getElementById('modal-root') ?? document.body
+
+  const node = (
+    <div className="fixed inset-0" style={{ zIndex: 2147483647 }} role="dialog" aria-modal="true">
+      {/* BEACON */}
+      <div className="fixed top-2 left-2 px-2 py-1 rounded-full bg-black/70 text-white text-[10px] pointer-events-none">
+        SendModal visible
+      </div>
+
       {/* Backdrop */}
       <button
         type="button"
@@ -70,7 +66,7 @@ export default function SendModal({
         aria-label="Close send modal"
       />
 
-      {/* Modal wrapper */}
+      {/* Modal */}
       <div className="absolute inset-0 flex items-end justify-center p-3 sm:items-center">
         <div
           className="
@@ -80,28 +76,23 @@ export default function SendModal({
             shadow-[0_25px_80px_rgba(0,0,0,0.65)]
             overflow-hidden
           "
+          onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-white truncate">{title}</div>
-              <div className="text-xs text-white/60 truncate">Send to address (or paste 0x…)</div>
+              <div className="text-xs text-white/60 truncate">Send to 0x address</div>
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="
-                rounded-full px-3 py-2 text-xs font-semibold
-                bg-white/10 text-white border border-white/15
-                active:scale-[0.98] transition
-              "
+              className="rounded-full px-3 py-2 text-xs font-semibold bg-white/10 text-white border border-white/15 active:scale-[0.98] transition"
             >
               Close
             </button>
           </div>
 
-          {/* Body */}
           <div className="px-4 py-4 space-y-3">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
               <div className="text-[11px] uppercase tracking-wider text-white/60">Recipient</div>
@@ -164,23 +155,14 @@ export default function SendModal({
             ) : null}
           </div>
 
-          {/* Footer */}
           <div className="px-4 py-4 border-t border-white/10">
             <button
               type="button"
-              className="
-                w-full rounded-full px-4 py-3
-                text-sm font-semibold
-                bg-white text-[#1b0736]
-                active:scale-[0.98] transition
-                disabled:opacity-50 disabled:cursor-not-allowed
-              "
+              className="w-full rounded-full px-4 py-3 text-sm font-semibold bg-white text-[#1b0736] active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={busy}
               onClick={async () => {
                 setErr('')
-                const maybe = toNormalized
-
-                if (!isAddress(maybe)) {
+                if (!isAddress(toNormalized)) {
                   setErr('Paste a valid 0x address.')
                   return
                 }
@@ -189,13 +171,11 @@ export default function SendModal({
 
                 try {
                   setBusy(true)
-                  await onConfirm(maybe as `0x${string}`, amt)
+                  await onConfirm(toNormalized as `0x${string}`, amt)
                   setBusy(false)
                   onClose()
                 } catch (e: any) {
                   setBusy(false)
-
-                  // Don’t let long wallet errors blow up layout
                   const msg =
                     typeof e?.shortMessage === 'string'
                       ? e.shortMessage
@@ -203,7 +183,6 @@ export default function SendModal({
                         ? e.message
                         : 'Transaction failed.'
 
-                  // Common cancel messages
                   if (/user rejected|rejected|denied|canceled|cancelled/i.test(msg)) {
                     setErr('Transaction cancelled.')
                   } else {
@@ -217,7 +196,8 @@ export default function SendModal({
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   )
+
+  return createPortal(node, mount)
 }
