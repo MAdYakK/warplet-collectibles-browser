@@ -1,7 +1,7 @@
 'use client'
 
 import useSWR, { useSWRConfig } from 'swr'
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
@@ -49,75 +49,31 @@ function chainFromRoute(route: string) {
   return mainnet
 }
 
-// helper: expected chainId hex for simple checks
-function toHexChainId(n: number) {
-  return `0x${n.toString(16)}` as const
-}
-
 export default function CollectionClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const params = useParams<RouteParams>()
-
-  // wagmi is allowed to exist, but we DO NOT depend on it in miniapp mode
-  const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount()
-
+  const { address: connectedAddress, isConnected } = useAccount()
   const { mutate } = useSWRConfig()
 
   const miniApp = useMemo(() => isProbablyMiniApp(), [])
-
   const chain = useMemo(() => String(params?.chain ?? '').toLowerCase(), [params?.chain])
   const chainObj = useMemo(() => chainFromRoute(chain), [chain])
-
   const contract = useMemo(() => String(params?.contract ?? '').toLowerCase(), [params?.contract])
 
-  // Browsing param (read-only mode for sends)
   const browsedAddr = (searchParams?.get('addr') || '').trim().toLowerCase()
+  const connectedLower = (connectedAddress || '').toLowerCase()
+  const targetAddress = (browsedAddr || connectedLower || '').toLowerCase()
 
-  // In miniapp, we’ll derive the wallet address from the Warpcast provider.
-  // In browser/dev, fall back to wagmi.
-  const [miniappAddress, setMiniappAddress] = useState<string>('')
-
-  useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      if (!miniApp) return
-      try {
-        const { sdk } = await import('@farcaster/miniapp-sdk')
-        const ethProvider = await sdk.wallet.getEthereumProvider()
-        if (!ethProvider) return
-        const accounts = (await (ethProvider as any).request?.({ method: 'eth_accounts' })) as string[] | undefined
-        const a = String(accounts?.[0] || '').toLowerCase()
-        if (!cancelled) setMiniappAddress(a)
-      } catch {
-        // ignore
-      }
-    }
-    run()
-    return () => {
-      cancelled = true
-    }
-  }, [miniApp])
-
-  const connectedLower = (wagmiAddress || '').toLowerCase()
-
-  const effectiveConnectedAddress = miniApp ? miniappAddress : connectedLower
-  const targetAddress = (browsedAddr || effectiveConnectedAddress || '').toLowerCase()
-
-  const disableActions =
-    Boolean(browsedAddr) &&
-    Boolean(effectiveConnectedAddress) &&
-    browsedAddr !== effectiveConnectedAddress
+  const disableActions = Boolean(browsedAddr) && Boolean(connectedLower) && browsedAddr !== connectedLower
 
   const { mode, setMode } = useViewMode({
     storageKey: 'warplet:collectionViewMode',
     defaultMode: 'cards',
   })
 
-  // IMPORTANT: Don’t require wagmiConnected in miniapp — it can be false even when Warpcast provider is available.
-  const canFetch = Boolean(targetAddress) && Boolean(contract) && (miniApp ? true : wagmiConnected)
-
-  const tokensKey = canFetch ? `warplet:tokens:${targetAddress}:${chain}:${contract}` : null
+  const tokensKey =
+    isConnected && targetAddress && contract ? `warplet:tokens:${targetAddress}:${chain}:${contract}` : null
 
   const { data: nftsData, isLoading, error } = useSWR<NftItem[]>(
     tokensKey,
@@ -134,12 +90,11 @@ export default function CollectionClient() {
 
   const statusText = useMemo(() => {
     if (!contract) return 'Bad route'
-    if (!miniApp && !wagmiConnected) return 'Connect to view'
-    if (miniApp && !targetAddress) return 'Open in Warpcast'
+    if (!isConnected) return 'Connect to view'
     if (loading) return 'Loading…'
     if (err) return err
     return `${nfts.length} item${nfts.length === 1 ? '' : 's'}`
-  }, [contract, miniApp, wagmiConnected, targetAddress, loading, err, nfts.length])
+  }, [contract, isConnected, loading, err, nfts.length])
 
   const pillBase = 'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]'
 
@@ -171,14 +126,18 @@ export default function CollectionClient() {
   const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
   const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
 
-  // One global modal outside virtualized content
+  // Modal state
   const [sendOpen, setSendOpen] = useState(false)
   const [sendNft, setSendNft] = useState<NftItem | null>(null)
   const [sendAnchorRect, setSendAnchorRect] = useState<AnchorRect | null>(null)
   const [sendIs1155, setSendIs1155] = useState(false)
   const [sendMaxAmount, setSendMaxAmount] = useState(1)
 
+  // ✅ BEACON: prove button click reaches CollectionClient
+  const [sendClicks, setSendClicks] = useState(0)
+
   const openSend = (args: { nft: NftItem; anchorRect: AnchorRect | null; is1155: boolean; maxAmount: number }) => {
+    setSendClicks((n) => n + 1)
     setSendNft(args.nft)
     setSendAnchorRect(args.anchorRect)
     setSendIs1155(args.is1155)
@@ -234,26 +193,12 @@ export default function CollectionClient() {
     const ethProvider = await sdk.wallet.getEthereumProvider()
     if (!ethProvider) throw new Error('No Warpcast Ethereum provider available')
 
-    // Optional: ensure chain is what we expect (helps when user is on wrong network)
-    try {
-      const chainIdHex = (await (ethProvider as any).request?.({ method: 'eth_chainId' })) as string | undefined
-      const expected = toHexChainId(chainObj.id)
-      if (chainIdHex && chainIdHex.toLowerCase() !== expected.toLowerCase()) {
-        throw new Error(`Wrong network. Switch to ${chainObj.name}.`)
-      }
-    } catch (e) {
-      // If provider blocks eth_chainId, continue — write may still work.
-      // But if we *did* get a mismatch, we throw above.
-      if (e instanceof Error && e.message.includes('Wrong network')) throw e
-    }
-
     const walletClient = createWalletClient({
       chain: chainObj,
       transport: custom(ethProvider as any),
     })
 
-    const addresses = await walletClient.getAddresses().catch(() => [])
-    const from = (addresses?.[0] || '') as `0x${string}`
+    const [from] = await walletClient.getAddresses()
     if (!from) throw new Error('Wallet not connected')
 
     if (is1155) {
@@ -294,10 +239,9 @@ export default function CollectionClient() {
             <button
               type="button"
               onClick={() => setMode('cards')}
-              className={[
-                pillBase,
-                mode === 'cards' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5',
-              ].join(' ')}
+              className={[pillBase, mode === 'cards' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5'].join(
+                ' '
+              )}
               aria-pressed={mode === 'cards'}
             >
               Cards
@@ -306,10 +250,9 @@ export default function CollectionClient() {
             <button
               type="button"
               onClick={() => setMode('grid')}
-              className={[
-                pillBase,
-                mode === 'grid' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5',
-              ].join(' ')}
+              className={[pillBase, mode === 'grid' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5'].join(
+                ' '
+              )}
               aria-pressed={mode === 'grid'}
             >
               Grid
@@ -324,8 +267,7 @@ export default function CollectionClient() {
       </div>
 
       <div ref={listRef} className="p-4 pb-24">
-        {/* Browser/dev gate */}
-        {!miniApp && !wagmiConnected ? (
+        {!isConnected ? (
           <div className="rounded-3xl ring-1 ring-white/20 bg-white/10 p-4 text-sm text-white shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
             Connect to view
           </div>
@@ -408,6 +350,11 @@ export default function CollectionClient() {
         )}
       </div>
 
+      {/* ✅ BEACON: if Send is wired, these numbers change */}
+      <div className="fixed bottom-2 left-2 z-[2147483647] text-[10px] text-white/90 bg-black/50 px-2 py-1 rounded-full pointer-events-none">
+        sendClicks: {sendClicks} | sendOpen: {String(sendOpen)} | sendNft: {sendNft ? 'yes' : 'no'}
+      </div>
+
       <SendModal
         open={sendOpen}
         onClose={() => setSendOpen(false)}
@@ -417,20 +364,10 @@ export default function CollectionClient() {
         onConfirm={async (to, amount) => {
           if (!sendNft) throw new Error('Missing token')
 
-          if (!miniApp) {
-            throw new Error('Send is only supported inside Warpcast right now.')
-          }
-
-          // If browsing another wallet, block sends
-          if (disableActions) {
-            throw new Error('Switch back to your connected wallet to send.')
-          }
+          if (!miniApp) throw new Error('Send is only supported inside Warpcast right now.')
 
           await sendWithWarpcastProvider({ to, amount, nft: sendNft, is1155: sendIs1155 })
-
-          // optimistic remove/decrement + revalidate
           await optimisticAfterSend(sendNft, amount, sendIs1155)
-          if (tokensKey) await mutate(tokensKey)
         }}
       />
     </main>

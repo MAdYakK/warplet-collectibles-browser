@@ -112,16 +112,18 @@ export default function TokenCard({
 
       {/* INFO + ACTIONS BUBBLE */}
       <div className="rounded-2xl border border-white/20 bg-[#6d28d9] px-3 py-3 shadow-[0_10px_35px_rgba(0,0,0,0.35)]">
-        <div className="text-sm font-semibold text-white truncate">
-          {nft.name ?? `Token #${nft.tokenId}`}
-        </div>
+        <div className="text-sm font-semibold text-white truncate">{nft.name ?? `Token #${nft.tokenId}`}</div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             className={[buttonBase, disableActions ? disabledBtn : enabledBtn].join(' ')}
             type="button"
             disabled={disableActions}
-            onClick={() => {
+            onClick={(e) => {
+              // ✅ make sure this click cannot be swallowed by anything higher
+              e.preventDefault()
+              e.stopPropagation()
+
               if (disableActions) return
 
               const rect = cardRef.current?.getBoundingClientRect() ?? null
