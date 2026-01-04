@@ -6,26 +6,51 @@ import { isAddress } from 'viem'
 
 type AnchorRect = { top: number; left: number; width: number; height: number }
 
+// Create/get a top-level host directly under <html> so nothing can clip it.
+function ensureModalHost() {
+  if (typeof document === 'undefined') return null
+
+  const existing = document.getElementById('wc-modal-host')
+  if (existing) return existing
+
+  const host = document.createElement('div')
+  host.id = 'wc-modal-host'
+  host.style.position = 'fixed'
+  host.style.inset = '0'
+  host.style.zIndex = '2147483647'
+  host.style.pointerEvents = 'none' // children will re-enable
+  host.style.width = '100vw'
+  host.style.height = '100vh'
+
+  // Append to <html>, not <body>
+  document.documentElement.appendChild(host)
+  return host
+}
+
 export default function SendModal({
   open,
   onClose,
   title,
-  maxAmount = 1,
-  anchorRect, // kept for later; not needed to show modal
   onConfirm,
+  maxAmount = 1,
+  anchorRect, // kept for compatibility; not required to display
 }: {
   open: boolean
   onClose: () => void
   title: string
+  onConfirm: (to: `0x${string}`, amount: number) => Promise<void> | void
   maxAmount?: number
   anchorRect?: AnchorRect | null
-  onConfirm: (to: `0x${string}`, amount: number) => Promise<void> | void
 }) {
   const [to, setTo] = useState('')
   const [amount, setAmount] = useState(1)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
+  const showAmount = (maxAmount ?? 1) > 1
+  const toTrim = useMemo(() => to.trim(), [to])
+
+  // Reset when opening
   useEffect(() => {
     if (!open) return
     setTo('')
@@ -34,6 +59,7 @@ export default function SendModal({
     setErr('')
   }, [open])
 
+  // Escape closes
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
@@ -43,39 +69,49 @@ export default function SendModal({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [open, onClose])
 
-  const showAmount = (maxAmount ?? 1) > 1
-  const toNormalized = useMemo(() => to.trim(), [to])
+  // Ensure host exists while modal is open (and remove when closed)
+  const [host, setHost] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = ensureModalHost()
+    setHost(h)
+
+    return () => {
+      // Keep host around for future opens (safer in miniapps),
+      // but you can remove it here if you prefer.
+      // h?.remove()
+    }
+  }, [open])
 
   if (!open) return null
-  if (typeof document === 'undefined') return null
-
-  const mount = document.getElementById('modal-root') ?? document.body
+  if (!host) return null
 
   const node = (
-    <div className="fixed inset-0" style={{ zIndex: 2147483647 }} role="dialog" aria-modal="true">
-      {/* BEACON */}
-      <div className="fixed top-2 left-2 px-2 py-1 rounded-full bg-black/70 text-white text-[10px] pointer-events-none">
-        SendModal visible
+    <div
+      className="fixed inset-0"
+      style={{
+        zIndex: 2147483647,
+        pointerEvents: 'auto', // re-enable interactions
+      }}
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Ultra-obvious beacon so we know it's painting */}
+      <div className="fixed top-2 left-2 px-2 py-1 rounded-full bg-black/80 text-white text-[10px] pointer-events-none">
+        SendModal VISIBLE
       </div>
 
       {/* Backdrop */}
-      <button
-        type="button"
+      <div
         className="absolute inset-0 bg-black/60"
         onClick={onClose}
-        aria-label="Close send modal"
+        aria-hidden="true"
       />
 
       {/* Modal */}
       <div className="absolute inset-0 flex items-end justify-center p-3 sm:items-center">
         <div
-          className="
-            w-full max-w-md
-            rounded-3xl border border-white/15
-            bg-[#1b0736]
-            shadow-[0_25px_80px_rgba(0,0,0,0.65)]
-            overflow-hidden
-          "
+          className="w-full max-w-[420px] rounded-3xl border border-white/15 bg-[#1b0736] shadow-[0_25px_80px_rgba(0,0,0,0.65)] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
@@ -149,7 +185,7 @@ export default function SendModal({
             ) : null}
 
             {err ? (
-              <div className="rounded-2xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              <div className="rounded-2xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200 break-words">
                 {err}
               </div>
             ) : null}
@@ -162,16 +198,19 @@ export default function SendModal({
               disabled={busy}
               onClick={async () => {
                 setErr('')
-                if (!isAddress(toNormalized)) {
+
+                if (!isAddress(toTrim)) {
                   setErr('Paste a valid 0x address.')
                   return
                 }
 
-                const amt = showAmount ? Math.max(1, Math.min(maxAmount, Math.floor(amount || 1))) : 1
+                const amt = showAmount
+                  ? Math.max(1, Math.min(maxAmount, Math.floor(amount || 1)))
+                  : 1
 
                 try {
                   setBusy(true)
-                  await onConfirm(toNormalized as `0x${string}`, amt)
+                  await onConfirm(toTrim as `0x${string}`, amt)
                   setBusy(false)
                   onClose()
                 } catch (e: any) {
@@ -186,7 +225,7 @@ export default function SendModal({
                   if (/user rejected|rejected|denied|canceled|cancelled/i.test(msg)) {
                     setErr('Transaction cancelled.')
                   } else {
-                    setErr(msg.length > 180 ? msg.slice(0, 180) + '…' : msg)
+                    setErr(msg.length > 220 ? msg.slice(0, 220) + '…' : msg)
                   }
                 }
               }}
@@ -199,5 +238,5 @@ export default function SendModal({
     </div>
   )
 
-  return createPortal(node, mount)
+  return createPortal(node, host)
 }
