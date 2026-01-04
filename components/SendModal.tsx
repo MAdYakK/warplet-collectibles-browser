@@ -1,41 +1,12 @@
 'use client'
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 type AnchorRect = { top: number; left: number; width: number; height: number }
 
 function isHexAddress(s: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(s)
-}
-
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n))
-}
-
-function isUserRejected(err: unknown): boolean {
-  const anyErr = err as any
-  const code = anyErr?.code
-  const msg = String(anyErr?.shortMessage || anyErr?.message || anyErr?.cause?.message || '').toLowerCase()
-  if (code === 4001) return true
-  if (code === 'ACTION_REJECTED') return true
-  if (msg.includes('user rejected')) return true
-  if (msg.includes('rejected the request')) return true
-  if (msg.includes('request rejected')) return true
-  if (msg.includes('denied')) return true
-  if (msg.includes('cancel')) return true
-  return false
-}
-
-function normalizeError(err: unknown): string {
-  const anyErr = err as any
-  const msg =
-    anyErr?.shortMessage ||
-    anyErr?.message ||
-    anyErr?.cause?.message ||
-    (typeof err === 'string' ? err : '') ||
-    'Transaction failed'
-  return String(msg)
 }
 
 export default function SendModal({
@@ -56,15 +27,7 @@ export default function SendModal({
   const [toInput, setToInput] = useState('')
   const [amountStr, setAmountStr] = useState('1')
   const [busy, setBusy] = useState(false)
-
-  // non-resizing overlay message
-  const [message, setMessage] = useState<string | null>(null)
-
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  const boxRef = useRef<HTMLDivElement | null>(null)
-  const [boxSize, setBoxSize] = useState({ w: 340, h: 390 })
+  const [err, setErr] = useState<string | null>(null)
 
   const max = Math.max(1, Math.floor(Number(maxAmount || 1)))
 
@@ -73,33 +36,7 @@ export default function SendModal({
     setToInput('')
     setAmountStr('1')
     setBusy(false)
-    setMessage(null)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    if (typeof document === 'undefined') return
-
-    const existing = document.getElementById('wcb-modal-root') as HTMLElement | null
-    if (existing) {
-      setPortalTarget(existing)
-      return
-    }
-
-    const el = document.createElement('div')
-    el.id = 'wcb-modal-root'
-    el.style.position = 'fixed'
-    el.style.inset = '0'
-    el.style.zIndex = '2147483647'
-    el.style.pointerEvents = 'none'
-    document.body.appendChild(el)
-    setPortalTarget(el)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const t = setTimeout(() => inputRef.current?.focus(), 50)
-    return () => clearTimeout(t)
+    setErr(null)
   }, [open])
 
   const amount = useMemo(() => {
@@ -108,41 +45,19 @@ export default function SendModal({
     return Math.max(1, Math.min(max, Math.floor(n)))
   }, [amountStr, max])
 
-  useLayoutEffect(() => {
-    if (!open) return
-    if (!boxRef.current) return
-
-    const measure = () => {
-      const r = boxRef.current!.getBoundingClientRect()
-      setBoxSize({ w: Math.max(260, Math.ceil(r.width)), h: Math.max(200, Math.ceil(r.height)) })
-    }
-
-    measure()
-    const ro = new ResizeObserver(() => measure())
-    ro.observe(boxRef.current)
-
-    window.addEventListener('resize', measure)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', measure)
-    }
-  }, [open, max])
-
-  const safePos = useMemo(() => {
-    if (typeof window === 'undefined') return { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }
+  const modalPos = useMemo(() => {
+    if (!anchorRect || typeof window === 'undefined') return null
+    const cx = anchorRect.left + anchorRect.width / 2
+    const cy = anchorRect.top + anchorRect.height / 2
 
     const vw = window.innerWidth
     const vh = window.innerHeight
-    const pad = 12
 
-    const cx = anchorRect ? anchorRect.left + anchorRect.width / 2 : vw / 2
-    const cy = anchorRect ? anchorRect.top + anchorRect.height / 2 : vh / 2
+    const x = Math.max(24, Math.min(vw - 24, cx))
+    const y = Math.max(24, Math.min(vh - 24, cy))
 
-    const left = clamp(cx - boxSize.w / 2, pad, vw - pad - boxSize.w)
-    const top = clamp(cy - boxSize.h / 2, pad, vh - pad - boxSize.h)
-
-    return { left, top }
-  }, [anchorRect, boxSize.w, boxSize.h])
+    return { left: x, top: y }
+  }, [anchorRect])
 
   const resolveToAddress = async (q: string): Promise<`0x${string}` | null> => {
     const raw = q.trim()
@@ -163,10 +78,10 @@ export default function SendModal({
   }, [busy, amount, max, toInput])
 
   if (!open) return null
-  if (!portalTarget) return null
+  if (typeof document === 'undefined') return null
 
   return createPortal(
-    <div className="fixed inset-0" style={{ zIndex: 2147483647, pointerEvents: 'auto' }}>
+    <div className="fixed inset-0 z-[2147483647]">
       <div
         className="absolute inset-0 bg-black/70"
         onClick={(e) => {
@@ -175,11 +90,17 @@ export default function SendModal({
         aria-hidden="true"
       />
 
-      <div className="absolute" style={{ left: safePos.left, top: safePos.top }}>
+      <div
+        className="absolute"
+        style={
+          modalPos
+            ? { left: modalPos.left, top: modalPos.top, transform: 'translate(-50%, -50%)' }
+            : { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }
+        }
+      >
         <div
-          ref={boxRef}
           className="
-            relative w-[88vw] max-w-sm
+            relative w-[86vw] max-w-sm
             max-h-[80vh] overflow-y-auto overflow-x-hidden
             rounded-3xl border border-white/20
             bg-[#a78bfa] text-white
@@ -189,29 +110,24 @@ export default function SendModal({
           role="dialog"
           aria-modal="true"
         >
-          <div className="p-4 border-b border-white/20 bg-white/10 flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold truncate text-white">{title}</div>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="shrink-0 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-xs font-semibold text-white active:scale-[0.98] transition"
-              aria-label="Close"
-              disabled={busy}
-            >
-              ✕
-            </button>
+          <div className="p-4 border-b border-white/20 bg-white/10">
+            <div className="text-sm font-semibold truncate text-white">{title}</div>
           </div>
 
           <div className="p-4 space-y-3">
             <div className="rounded-2xl border border-white/20 bg-white/15 p-2">
               <input
-                ref={inputRef}
                 value={toInput}
                 onChange={(e) => setToInput(e.target.value)}
-                placeholder="0x…  |  madyak.eth  |  madyak"
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    setErr(null)
+                    const resolved = await resolveToAddress(toInput)
+                    if (!resolved) setErr('Not found')
+                  }
+                }}
+                placeholder="0x… | ENS | @fname | fid:123 | 123"
                 className="w-full bg-transparent px-3 py-2 text-sm text-white placeholder:text-white/70 outline-none"
                 style={{ color: '#ffffff', caretColor: '#ffffff' }}
                 autoCapitalize="none"
@@ -248,19 +164,21 @@ export default function SendModal({
                       const v = e.target.value.replace(/[^\d]/g, '')
                       setAmountStr(v || '1')
                     }}
-                    className="flex-1 min-w-0 rounded-full border border-white/25 bg-white/15 px-4 py-2 text-sm text-white outline-none"
+                    className="flex-1 rounded-full border border-white/25 bg-white/15 px-4 py-2 text-sm text-white outline-none"
                     style={{ color: '#ffffff', caretColor: '#ffffff' }}
                   />
                 </div>
               </div>
             ) : null}
 
-            <div className="pt-1 flex gap-3">
+            {err ? <div className="text-xs text-white font-semibold">{err}</div> : null}
+
+            <div className="pt-1 flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={onClose}
                 className="
-                  flex-1 rounded-full px-4 py-2.5 text-sm font-semibold
+                  flex-1 rounded-full px-4 py-3 text-sm font-semibold
                   border border-white/25 bg-white/15 text-white
                   active:scale-[0.98] transition
                 "
@@ -273,24 +191,32 @@ export default function SendModal({
                 type="button"
                 onClick={async () => {
                   if (busy) return
-                  setMessage(null)
+                  if (amount < 1 || amount > max) {
+                    setErr('Not found')
+                    return
+                  }
+
+                  setErr(null)
                   setBusy(true)
                   try {
                     const resolved = await resolveToAddress(toInput)
                     if (!resolved) {
-                      setMessage('Not found')
+                      setErr('Not found')
                       return
                     }
+
                     await onConfirm(resolved, amount)
                     onClose()
-                  } catch (e) {
-                    setMessage(isUserRejected(e) ? 'Transaction cancelled' : normalizeError(e))
+                  } catch (e: any) {
+                    // keep the modal stable; short message
+                    const msg = String(e?.message || 'Transaction failed')
+                    setErr(msg.length > 120 ? `${msg.slice(0, 120)}…` : msg)
                   } finally {
                     setBusy(false)
                   }
                 }}
                 className={[
-                  'flex-1 rounded-full px-4 py-2.5 text-sm font-semibold active:scale-[0.98] transition',
+                  'flex-1 rounded-full px-4 py-3 text-sm font-semibold active:scale-[0.98] transition',
                   canAttemptSend ? 'bg-white text-[#1b0736]' : 'bg-white/25 text-white/70 cursor-not-allowed',
                 ].join(' ')}
                 disabled={!canAttemptSend}
@@ -299,44 +225,9 @@ export default function SendModal({
               </button>
             </div>
           </div>
-
-          {/* Non-resizing message overlay */}
-          {message ? (
-            <div className="absolute left-3 right-3 bottom-3">
-              <div className="rounded-2xl border border-white/25 bg-black/55 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-                <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/15">
-                  <div className="text-xs font-semibold text-white">Message</div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(message)
-                        } catch {}
-                      }}
-                      className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white active:scale-[0.98] transition"
-                    >
-                      Copy
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMessage(null)}
-                      className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white active:scale-[0.98] transition"
-                      aria-label="Close message"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-                <div className="px-3 py-2 text-[12px] text-white whitespace-pre-wrap break-words max-h-28 overflow-auto">
-                  {message}
-                </div>
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
     </div>,
-    portalTarget
+    document.body
   )
 }

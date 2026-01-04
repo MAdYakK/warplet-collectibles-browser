@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
 
 function shortAddr(a?: string) {
@@ -13,22 +13,6 @@ function isProbablyMiniApp() {
   const inIframe = window.self !== window.top
   const hasFarcasterGlobal = Boolean((window as any).farcaster)
   return hasFarcasterGlobal || inIframe
-}
-
-const DISCONNECT_LOCK_KEY = 'warplet:manualDisconnectLock'
-
-function getDisconnectLock(): boolean {
-  try {
-    return sessionStorage.getItem(DISCONNECT_LOCK_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function setDisconnectLock(on: boolean) {
-  try {
-    sessionStorage.setItem(DISCONNECT_LOCK_KEY, on ? '1' : '0')
-  } catch {}
 }
 
 export default function ConnectBar({
@@ -44,40 +28,41 @@ export default function ConnectBar({
 
   const miniApp = useMemo(() => isProbablyMiniApp(), [])
 
-  const primary = connectors.find((c) => c.ready) || (connectors.length ? connectors[0] : undefined)
+  // In normal browser mode we can use wagmi connectors.
+  // In miniapp mode we should NOT force wagmi connect() (it’s the source of connector.getChainId crashes).
+  const primary = connectors?.[0]
 
-  // Auto-connect in miniapp, but NOT right after a manual disconnect.
-  useEffect(() => {
-    if (!miniApp) return
-    if (isConnected) return
+  const pillBase =
+    'rounded-full px-4 py-2 text-xs font-semibold active:scale-[0.98] transition whitespace-nowrap'
+  const pillOn = 'bg-white text-[#1b0736]'
+  const pillOff = 'bg-white/10 text-white border border-white/15 hover:bg-white/15'
+
+  // Browser/dev connect button (wagmi)
+  const onConnect = () => {
     if (!primary) return
-    if (isPending) return
-    if (getDisconnectLock()) return
-
     connect({ connector: primary })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [miniApp, isConnected, primary?.id, isPending])
-
-  const rightLabel = (() => {
-    if (isConnected) return 'Disconnect'
-    if (isPending) return 'Connecting…'
-    if (!primary) return miniApp ? 'Loading…' : 'Open in Warpcast'
-    return 'Connect'
-  })()
-
-  const pillBase = 'rounded-full px-4 py-2 text-xs font-semibold active:scale-[0.98] transition'
-  const pillPrimary = 'bg-white text-[#1b0736]'
-  const pillDisabled = 'bg-white/25 text-white/70 cursor-not-allowed'
-
-  const onConnectClick = () => {
-    // user manually initiated connect => allow auto-connect again
-    setDisconnectLock(false)
-    if (primary) connect({ connector: primary })
   }
 
-  const onDisconnectClick = async () => {
-    // prevent immediate auto-reconnect in miniapp
-    setDisconnectLock(true)
+  // Miniapp: "Switch wallet" = ask Warpcast provider for accounts again.
+  // Then reload to rehydrate wagmi/SWR state cleanly.
+  const onSwitchWallet = async () => {
+    try {
+      const { sdk } = await import('@farcaster/miniapp-sdk')
+      const provider = await sdk.wallet.getEthereumProvider()
+      if (!provider) throw new Error('No Warpcast wallet provider')
+
+      await (provider as any).request?.({ method: 'eth_requestAccounts' })
+
+      // Hard reset is the most reliable way to sync hooks/state in embedded contexts.
+      // (Warpcast effectively owns the session; wagmi can lag behind.)
+      window.location.reload()
+    } catch (e) {
+      console.warn('Switch wallet failed', e)
+    }
+  }
+
+  // Browser/dev disconnect (wagmi)
+  const onDisconnect = async () => {
     try {
       await disconnectAsync()
     } catch {
@@ -85,39 +70,48 @@ export default function ConnectBar({
     }
   }
 
+  // Optional: If you're in browser and not connected, don't show "Connecting…" forever.
+  // In miniapp we assume Warpcast is handling connection UX.
+  const leftStatus = (() => {
+    if (isConnected) return shortAddr(address)
+    if (miniApp) return 'Wallet via Warpcast'
+    return 'Not connected'
+  })()
+
+  const rightError = error?.message ? String(error.message) : ''
+
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur px-4 py-3 shadow-sm">
+    <div className="w-full rounded-3xl border border-white/10 bg-white/5 backdrop-blur px-4 py-3 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-wider text-white/60">Wallet</div>
-          <div className="text-sm font-semibold text-white truncate">
-            {isConnected ? shortAddr(address) : miniApp ? 'Not connected' : 'Not connected'}
-          </div>
-          {error ? <div className="mt-1 text-xs text-red-300">{error.message}</div> : null}
+          <div className="text-sm font-semibold text-white truncate">{leftStatus}</div>
+          {rightError ? <div className="mt-1 text-xs text-red-300 truncate">{rightError}</div> : null}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           {showMyWalletButton ? (
-            <button type="button" onClick={onMyWallet} className={[pillBase, pillPrimary].join(' ')}>
+            <button type="button" onClick={onMyWallet} className={[pillBase, pillOn].join(' ')}>
               My Wallet
             </button>
           ) : null}
 
-          {/* Single primary action: Connect OR Disconnect (no "Ready") */}
-          {!isConnected ? (
+          {/* Miniapp: do NOT show Connect/Disconnect, just Switch Wallet */}
+          {miniApp ? (
+            <button type="button" onClick={onSwitchWallet} className={[pillBase, pillOff].join(' ')}>
+              Switch wallet
+            </button>
+          ) : !isConnected ? (
             <button
               type="button"
-              className={[
-                pillBase,
-                isPending || (!primary && miniApp) ? pillDisabled : pillPrimary,
-              ].join(' ')}
-              onClick={onConnectClick}
-              disabled={isPending || (!primary && miniApp)}
+              onClick={onConnect}
+              className={[pillBase, pillOn].join(' ')}
+              disabled={isPending || !primary}
             >
-              {rightLabel}
+              {isPending ? 'Connecting…' : 'Connect'}
             </button>
           ) : (
-            <button type="button" className={[pillBase, pillPrimary].join(' ')} onClick={onDisconnectClick}>
+            <button type="button" onClick={onDisconnect} className={[pillBase, pillOff].join(' ')}>
               Disconnect
             </button>
           )}
