@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import useSWR from 'swr'
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, useDisconnect } from 'wagmi'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 
@@ -20,8 +20,7 @@ type CollectionSummary = {
 
 const CHAINS: string[] = ['ethereum', 'base', 'polygon', 'optimism', 'arbitrum', 'avalanche', 'bsc']
 
-const FEATURED_MINIAPP_URL =
-  'https://farcaster.xyz/miniapps/2vgEwTqkDV2n/crytpodickpunks-mint'
+const FEATURED_MINIAPP_URL = 'https://farcaster.xyz/miniapps/2vgEwTqkDV2n/crytpodickpunks-mint'
 
 const BANNER_MESSAGES = [
   'WARPLET COLLECTIBLES • BROWSE YOUR NFTs • SHARE TO FARCASTER',
@@ -99,6 +98,7 @@ export default function HomeClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isConnected, address: connectedAddress } = useAccount()
+  const { disconnect } = useDisconnect()
 
   // Browse other wallet input (ENS/farcaster/0x)
   const [browseInput, setBrowseInput] = useState('')
@@ -119,8 +119,7 @@ export default function HomeClient() {
   const connectedLower = (connectedAddress || '').toLowerCase()
 
   // Only browsing when it's actually a different wallet
-  const isBrowsingOther =
-    Boolean(addrParam) && Boolean(connectedLower) && addrParam !== connectedLower
+  const isBrowsingOther = Boolean(addrParam) && Boolean(connectedLower) && addrParam !== connectedLower
 
   const targetAddress = (isBrowsingOther ? addrParam : connectedLower) || ''
 
@@ -149,23 +148,15 @@ export default function HomeClient() {
   }, [targetAddress])
 
   // ---- SWR: collections cached per target address ----
-  const collectionsKey =
-    isConnected && targetAddress ? `warplet:collections:${targetAddress}` : null
+  const collectionsKey = isConnected && targetAddress ? `warplet:collections:${targetAddress}` : null
 
-  const {
-    data: collectionsData,
-    isLoading: collectionsLoading,
-    error: collectionsError,
-  } = useSWR<CollectionSummary[]>(
+  const { data: collectionsData, isLoading: collectionsLoading, error: collectionsError } = useSWR<CollectionSummary[]>(
     collectionsKey,
     async () => {
       const results = await Promise.all(
         CHAINS.map(async (chain) => {
           try {
-            // NOTE: no { cache:'no-store' } here — let SWR + server TTL do their job
-            const json = await fetcher(
-              `/api/nfts/collections?address=${targetAddress}&chain=${chain}`
-            )
+            const json = await fetcher(`/api/nfts/collections?address=${targetAddress}&chain=${chain}`)
             const cols = (json.collections ?? []) as CollectionSummary[]
             return cols.map((c) => ({
               ...c,
@@ -219,7 +210,6 @@ export default function HomeClient() {
 
     setBrowseStatus('')
     try {
-      // NOTE: no-store removed
       const json = await fetcher(`/api/resolve?q=${encodeURIComponent(q)}`)
       if (!json?.address) {
         setBrowseStatus('Not found')
@@ -229,7 +219,6 @@ export default function HomeClient() {
       const resolved = String(json.address).toLowerCase()
       setBrowseStatus('')
       setBrowseInput('')
-      // SWR key changes, so it will reuse cache if already fetched, else fetch once
       router.push(`/?addr=${encodeURIComponent(resolved)}`)
     } catch {
       setBrowseStatus('Not found')
@@ -266,8 +255,30 @@ export default function HomeClient() {
   return (
     <main className="min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
       <div className="mx-auto max-w-md px-3 pb-24">
+        {/* Sticky header: marquee + disconnect bubble on right */}
         <div className="sticky top-0 z-50 pt-3 pb-2" style={{ backgroundColor: '#1b0736' }}>
-          <Marquee text={bannerText} />
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <Marquee text={bannerText} />
+            </div>
+
+            {isConnected ? (
+              <button
+                type="button"
+                onClick={() => {
+                  // disconnect + exit browsing mode if active
+                  try {
+                    disconnect()
+                  } catch {}
+                  if (addrParam) router.push('/')
+                }}
+                className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/90 backdrop-blur active:scale-[0.98] transition"
+                aria-label="Disconnect wallet"
+              >
+                Disconnect
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <section className="mt-2">
@@ -354,9 +365,6 @@ export default function HomeClient() {
                   }}
                 />
               </button>
-
-              {/* FEATURED TEXT PLACEHOLDER: add overlay text here later */}
-              {/* FEATURED TEXT COLOR: change classes here later */}
             </div>
           </div>
         </section>
@@ -364,9 +372,7 @@ export default function HomeClient() {
         {/* Collections grid */}
         <section className="mt-4" ref={gridRef}>
           {emptyState ? (
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">
-              {emptyState}
-            </div>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white">{emptyState}</div>
           ) : (
             <div style={{ height: `${totalSize}px`, position: 'relative' }}>
               {vRows.map((v) => {

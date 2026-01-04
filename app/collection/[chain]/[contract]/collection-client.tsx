@@ -5,7 +5,8 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useAccount, useWriteContract } from 'wagmi'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
-import { erc721Abi } from 'viem'
+import { erc721Abi, createPublicClient, createWalletClient, custom, http } from 'viem'
+import { mainnet, base, optimism, polygon } from 'viem/chains'
 
 import TokenCard from '../../../../components/TokenCard'
 import SendModal from '../../../../components/SendModal'
@@ -15,7 +16,6 @@ import useViewMode from '../../../../lib/useViewMode'
 type RouteParams = { chain?: string; contract?: string }
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-// Minimal ERC-1155 ABI for safeTransferFrom
 const erc1155Abi = [
   {
     type: 'function',
@@ -34,15 +34,33 @@ const erc1155Abi = [
 
 type AnchorRect = { top: number; left: number; width: number; height: number }
 
+function isFarcasterMiniApp(): boolean {
+  if (typeof window === 'undefined') return false
+  return Boolean((window as any).farcaster)
+}
+
+function chainFromRoute(route: string) {
+  const c = String(route || '').toLowerCase()
+  if (c === 'base') return base
+  if (c === 'optimism') return optimism
+  if (c === 'polygon' || c === 'matic') return polygon
+  return mainnet
+}
+
 export default function CollectionClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const params = useParams<RouteParams>()
   const { address: connectedAddress, isConnected } = useAccount()
+
+  // keep wagmi as fallback (browser/dev)
   const { writeContractAsync } = useWriteContract()
+
   const { mutate } = useSWRConfig()
 
   const chain = useMemo(() => String(params?.chain ?? '').toLowerCase(), [params?.chain])
+  const chainObj = useMemo(() => chainFromRoute(chain), [chain])
+
   const contract = useMemo(() => String(params?.contract ?? '').toLowerCase(), [params?.contract])
 
   const browsedAddr = (searchParams?.get('addr') || '').trim().toLowerCase()
@@ -82,7 +100,6 @@ export default function CollectionClient() {
 
   const pillBase = 'rounded-full px-3 py-2 text-xs font-semibold transition active:scale-[0.98]'
 
-  // Virtualization
   const listRef = useRef<HTMLDivElement | null>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
 
@@ -110,7 +127,6 @@ export default function CollectionClient() {
   const items = mode === 'grid' ? gridVirtualizer.getVirtualItems() : cardsVirtualizer.getVirtualItems()
   const totalSize = mode === 'grid' ? gridVirtualizer.getTotalSize() : cardsVirtualizer.getTotalSize()
 
-  // Global modal state
   const [sendOpen, setSendOpen] = useState(false)
   const [sendNft, setSendNft] = useState<NftItem | null>(null)
   const [sendAnchorRect, setSendAnchorRect] = useState<AnchorRect | null>(null)
@@ -125,36 +141,24 @@ export default function CollectionClient() {
     setSendOpen(true)
   }
 
-  // Helper for optimistic cache update after send
   const optimisticAfterSend = async (sent: NftItem, amountSent: number, is1155: boolean) => {
     if (!tokensKey) return
-
-    // Optimistic update first
     await mutate(
       tokensKey,
       (current?: NftItem[]) => {
         if (!current) return current
-
         const match = (x: NftItem) =>
           x.contractAddress.toLowerCase() === sent.contractAddress.toLowerCase() && String(x.tokenId) === String(sent.tokenId)
 
-        if (!is1155) {
-          // ERC-721: remove token
-          return current.filter((x) => !match(x))
-        }
+        if (!is1155) return current.filter((x) => !match(x))
 
-        // ERC-1155: decrement balance/amount if present
         return current
           .map((x) => {
             if (!match(x)) return x
-
             const raw = (x as any).amount ?? (x as any).balance ?? 1
             const cur = Number(raw) || 1
             const next = cur - amountSent
-
             if (next <= 0) return null as any
-
-            // preserve shape but update common fields
             const updated: any = { ...x }
             if ((x as any).amount != null) updated.amount = next
             if ((x as any).balance != null) updated.balance = next
@@ -166,6 +170,61 @@ export default function CollectionClient() {
     )
   }
 
+  // ✅ Warpcast-first send path using viem + SDK provider
+  const sendWithWarpcastProvider = async ({
+    to,
+    amount,
+    nft,
+    is1155,
+  }: {
+    to: `0x${string}`
+    amount: number
+    nft: NftItem
+    is1155: boolean
+  }) => {
+    const { sdk } = await import('@farcaster/miniapp-sdk')
+
+    // New SDK method (preferred). If your SDK version differs, we can adjust.
+    const ethProvider = await sdk.wallet.getEthereumProvider()
+    if (!ethProvider) throw new Error('No Warpcast Ethereum provider available')
+
+    const walletClient = createWalletClient({
+      chain: chainObj,
+      transport: custom(ethProvider as any),
+    })
+
+    // Public client used for simulation on some wallets (helps with reverts / gas)
+    const publicClient = createPublicClient({
+      chain: chainObj,
+      transport: http(),
+    })
+
+    // If connectedAddress is missing for some reason, attempt to read from wallet
+    const from = (connectedAddress ||
+      (await walletClient.getAddresses().then((a) => a?.[0]).catch(() => null))) as `0x${string}` | null
+    if (!from) throw new Error('Wallet not connected')
+
+    if (is1155) {
+      const req = await publicClient.simulateContract({
+        address: nft.contractAddress as `0x${string}`,
+        abi: erc1155Abi,
+        functionName: 'safeTransferFrom',
+        args: [from, to, BigInt(nft.tokenId), BigInt(amount), '0x'],
+        account: from,
+      })
+      await walletClient.writeContract(req.request)
+    } else {
+      const req = await publicClient.simulateContract({
+        address: nft.contractAddress as `0x${string}`,
+        abi: erc721Abi,
+        functionName: 'safeTransferFrom',
+        args: [from, to, BigInt(nft.tokenId)],
+        account: from,
+      })
+      await walletClient.writeContract(req.request)
+    }
+  }
+
   return (
     <main className="mx-auto max-w-md min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
       <div
@@ -173,7 +232,6 @@ export default function CollectionClient() {
         style={{ backgroundColor: 'rgba(27, 7, 54, 0.85)' }}
       >
         <div className="p-3 flex items-center justify-between gap-3">
-          {/* Buttons bubble */}
           <div className="rounded-full ring-1 ring-white/20 bg-white/10 p-1 flex items-center gap-1 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
             <button
               type="button"
@@ -186,10 +244,9 @@ export default function CollectionClient() {
             <button
               type="button"
               onClick={() => setMode('cards')}
-              className={[
-                pillBase,
-                mode === 'cards' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5',
-              ].join(' ')}
+              className={[pillBase, mode === 'cards' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5'].join(
+                ' '
+              )}
               aria-pressed={mode === 'cards'}
             >
               Cards
@@ -198,17 +255,15 @@ export default function CollectionClient() {
             <button
               type="button"
               onClick={() => setMode('grid')}
-              className={[
-                pillBase,
-                mode === 'grid' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5',
-              ].join(' ')}
+              className={[pillBase, mode === 'grid' ? 'bg-white text-[#1b0736]' : 'text-white/90 hover:bg-white/5'].join(
+                ' '
+              )}
               aria-pressed={mode === 'grid'}
             >
               Grid
             </button>
           </div>
 
-          {/* Status bubble */}
           <div className="rounded-2xl ring-1 ring-white/20 bg-white/10 px-3 py-2 text-right shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
             <div className="text-sm font-semibold truncate text-white">Collection</div>
             <div className="text-xs text-white/80">{statusText}</div>
@@ -258,16 +313,8 @@ export default function CollectionClient() {
                       }}
                       className="grid grid-cols-2 gap-3"
                     >
-                      {left ? (
-                        <TokenCard nft={left} variant="grid" disableActions={disableActions} onOpenSend={openSend} />
-                      ) : (
-                        <div />
-                      )}
-                      {right ? (
-                        <TokenCard nft={right} variant="grid" disableActions={disableActions} onOpenSend={openSend} />
-                      ) : (
-                        <div />
-                      )}
+                      {left ? <TokenCard nft={left} variant="grid" disableActions={disableActions} onOpenSend={openSend} /> : <div />}
+                      {right ? <TokenCard nft={right} variant="grid" disableActions={disableActions} onOpenSend={openSend} /> : <div />}
                     </div>
                   )
                 })}
@@ -300,7 +347,6 @@ export default function CollectionClient() {
         )}
       </div>
 
-      {/* One modal, outside virtualized content */}
       <SendModal
         open={sendOpen}
         onClose={() => setSendOpen(false)}
@@ -308,27 +354,32 @@ export default function CollectionClient() {
         maxAmount={sendIs1155 ? sendMaxAmount : 1}
         anchorRect={sendAnchorRect}
         onConfirm={async (to, amount) => {
-          if (!connectedAddress) throw new Error('Wallet not connected')
           if (!sendNft) throw new Error('Missing token')
 
-          // Perform transfer
-          if (sendIs1155) {
-            await writeContractAsync({
-              address: sendNft.contractAddress as `0x${string}`,
-              abi: erc1155Abi,
-              functionName: 'safeTransferFrom',
-              args: [connectedAddress, to, BigInt(sendNft.tokenId), BigInt(amount), '0x'],
-            })
+          // Prefer Warpcast provider path to avoid connector.getChainId crash
+          if (isFarcasterMiniApp()) {
+            await sendWithWarpcastProvider({ to, amount, nft: sendNft, is1155: sendIs1155 })
           } else {
-            await writeContractAsync({
-              address: sendNft.contractAddress as `0x${string}`,
-              abi: erc721Abi,
-              functionName: 'safeTransferFrom',
-              args: [connectedAddress, to, BigInt(sendNft.tokenId)],
-            })
+            // fallback path (dev)
+            if (!connectedAddress) throw new Error('Wallet not connected')
+            if (sendIs1155) {
+              await writeContractAsync({
+                address: sendNft.contractAddress as `0x${string}`,
+                abi: erc1155Abi,
+                functionName: 'safeTransferFrom',
+                args: [connectedAddress, to, BigInt(sendNft.tokenId), BigInt(amount), '0x'],
+              })
+            } else {
+              await writeContractAsync({
+                address: sendNft.contractAddress as `0x${string}`,
+                abi: erc721Abi,
+                functionName: 'safeTransferFrom',
+                args: [connectedAddress, to, BigInt(sendNft.tokenId)],
+              })
+            }
           }
 
-          // Refresh list so the sent item disappears / balance updates
+          // refresh list so it disappears / balance updates
           await optimisticAfterSend(sendNft, amount, sendIs1155)
         }}
       />

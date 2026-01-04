@@ -13,25 +13,29 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n))
 }
 
-// Best-effort detection of user-cancel in wallet UX (MetaMask / Rainbow / WalletConnect / Warpcast)
 function isUserRejected(err: unknown): boolean {
   const anyErr = err as any
   const code = anyErr?.code
   const msg = String(anyErr?.shortMessage || anyErr?.message || anyErr?.cause?.message || '').toLowerCase()
-
-  // Common rejection codes
-  if (code === 4001) return true // EIP-1193 user rejected
-  if (code === 'ACTION_REJECTED') return true // ethers
-  if (code === 'UserRejectedRequestError') return true
-
-  // Common message patterns
+  if (code === 4001) return true
+  if (code === 'ACTION_REJECTED') return true
   if (msg.includes('user rejected')) return true
   if (msg.includes('rejected the request')) return true
   if (msg.includes('request rejected')) return true
-  if (msg.includes('denied transaction')) return true
-  if (msg.includes('rejected')) return true
-
+  if (msg.includes('denied')) return true
+  if (msg.includes('cancel')) return true
   return false
+}
+
+function normalizeError(err: unknown): string {
+  const anyErr = err as any
+  const msg =
+    anyErr?.shortMessage ||
+    anyErr?.message ||
+    anyErr?.cause?.message ||
+    (typeof err === 'string' ? err : '') ||
+    'Transaction failed'
+  return String(msg)
 }
 
 export default function SendModal({
@@ -53,14 +57,12 @@ export default function SendModal({
   const [amountStr, setAmountStr] = useState('1')
   const [busy, setBusy] = useState(false)
 
-  // Toast-style message that does NOT expand modal
-  const [toast, setToast] = useState<string | null>(null)
+  // non-resizing overlay message
+  const [message, setMessage] = useState<string | null>(null)
 
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null)
-
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  // Measure modal box to clamp fully inside viewport
   const boxRef = useRef<HTMLDivElement | null>(null)
   const [boxSize, setBoxSize] = useState({ w: 340, h: 390 })
 
@@ -71,10 +73,9 @@ export default function SendModal({
     setToInput('')
     setAmountStr('1')
     setBusy(false)
-    setToast(null)
+    setMessage(null)
   }, [open])
 
-  // Stable portal root (works better in embedded environments)
   useEffect(() => {
     if (!open) return
     if (typeof document === 'undefined') return
@@ -95,7 +96,6 @@ export default function SendModal({
     setPortalTarget(el)
   }, [open])
 
-  // Autofocus input on open
   useEffect(() => {
     if (!open) return
     const t = setTimeout(() => inputRef.current?.focus(), 50)
@@ -147,19 +147,14 @@ export default function SendModal({
   const resolveToAddress = async (q: string): Promise<`0x${string}` | null> => {
     const raw = q.trim()
     if (!raw) return null
-
-    // direct 0x
     if (isHexAddress(raw)) return raw.toLowerCase() as `0x${string}`
 
-    // ENS / farcaster username -> your resolver endpoint
     try {
       const res = await fetch(`/api/resolve?q=${encodeURIComponent(raw)}`, { cache: 'no-store' })
       const json = await res.json()
       const addr = String(json?.address || '').trim()
       if (res.ok && isHexAddress(addr)) return addr.toLowerCase() as `0x${string}`
-    } catch {
-      // ignore
-    }
+    } catch {}
     return null
   }
 
@@ -194,13 +189,11 @@ export default function SendModal({
           role="dialog"
           aria-modal="true"
         >
-          {/* Header */}
           <div className="p-4 border-b border-white/20 bg-white/10 flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold truncate text-white">{title}</div>
             </div>
 
-            {/* Dedicated close button */}
             <button
               type="button"
               onClick={onClose}
@@ -218,14 +211,6 @@ export default function SendModal({
                 ref={inputRef}
                 value={toInput}
                 onChange={(e) => setToInput(e.target.value)}
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    setToast(null)
-                    const resolved = await resolveToAddress(toInput)
-                    if (!resolved) setToast('Not found')
-                  }
-                }}
                 placeholder="0x…  |  madyak.eth  |  madyak"
                 className="w-full bg-transparent px-3 py-2 text-sm text-white placeholder:text-white/70 outline-none"
                 style={{ color: '#ffffff', caretColor: '#ffffff' }}
@@ -235,7 +220,6 @@ export default function SendModal({
               />
             </div>
 
-            {/* Quantity only if ERC-1155 (max > 1) */}
             {max > 1 ? (
               <div className="rounded-2xl border border-white/20 bg-white/15 p-3">
                 <div className="flex items-center justify-between">
@@ -289,29 +273,18 @@ export default function SendModal({
                 type="button"
                 onClick={async () => {
                   if (busy) return
-                  if (amount < 1 || amount > max) {
-                    setToast('Invalid quantity')
-                    return
-                  }
-
-                  setToast(null)
+                  setMessage(null)
                   setBusy(true)
                   try {
                     const resolved = await resolveToAddress(toInput)
                     if (!resolved) {
-                      setToast('Not found')
+                      setMessage('Not found')
                       return
                     }
-
                     await onConfirm(resolved, amount)
                     onClose()
-                  } catch (e: any) {
-                    // If user rejects in wallet, don't blow up UI—show small toast only
-                    if (isUserRejected(e)) {
-                      setToast('Transaction cancelled')
-                      return
-                    }
-                    setToast(String(e?.shortMessage || e?.message || 'Transaction failed'))
+                  } catch (e) {
+                    setMessage(isUserRejected(e) ? 'Transaction cancelled' : normalizeError(e))
                   } finally {
                     setBusy(false)
                   }
@@ -327,19 +300,37 @@ export default function SendModal({
             </div>
           </div>
 
-          {/* Toast overlay that DOES NOT affect layout */}
-          {toast ? (
-            <div className="pointer-events-none absolute left-3 right-3 bottom-3">
-              <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-2xl border border-white/25 bg-black/40 px-3 py-2 text-xs text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-                <div className="min-w-0 truncate">{toast}</div>
-                <button
-                  type="button"
-                  onClick={() => setToast(null)}
-                  className="shrink-0 rounded-full border border-white/25 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white active:scale-[0.98] transition"
-                  aria-label="Close message"
-                >
-                  ✕
-                </button>
+          {/* Non-resizing message overlay */}
+          {message ? (
+            <div className="absolute left-3 right-3 bottom-3">
+              <div className="rounded-2xl border border-white/25 bg-black/55 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+                <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/15">
+                  <div className="text-xs font-semibold text-white">Message</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(message)
+                        } catch {}
+                      }}
+                      className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white active:scale-[0.98] transition"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMessage(null)}
+                      className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white active:scale-[0.98] transition"
+                      aria-label="Close message"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="px-3 py-2 text-[12px] text-white whitespace-pre-wrap break-words max-h-28 overflow-auto">
+                  {message}
+                </div>
               </div>
             </div>
           ) : null}
