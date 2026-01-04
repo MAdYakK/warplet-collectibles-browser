@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import useSWR from 'swr'
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useAccount, useDisconnect } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 
@@ -98,13 +98,10 @@ export default function HomeClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isConnected, address: connectedAddress } = useAccount()
-  const { disconnect } = useDisconnect()
 
-  // Browse other wallet input (ENS/farcaster/0x)
   const [browseInput, setBrowseInput] = useState('')
   const [browseStatus, setBrowseStatus] = useState<string>('')
 
-  // Search collections filter
   const [collectionQuery, setCollectionQuery] = useState('')
 
   const bannerText = useMemo(() => {
@@ -118,21 +115,15 @@ export default function HomeClient() {
 
   const connectedLower = (connectedAddress || '').toLowerCase()
 
-  // Only browsing when it's actually a different wallet
   const isBrowsingOther = Boolean(addrParam) && Boolean(connectedLower) && addrParam !== connectedLower
-
   const targetAddress = (isBrowsingOther ? addrParam : connectedLower) || ''
 
-  // If someone lands on /?addr=<your address>, clean it up
   useEffect(() => {
     if (!addrParam) return
     if (!connectedLower) return
-    if (addrParam === connectedLower) {
-      router.replace('/')
-    }
+    if (addrParam === connectedLower) router.replace('/')
   }, [addrParam, connectedLower, router])
 
-  // Restore scroll per wallet
   useEffect(() => {
     try {
       const key = `warplet:homeScroll:${targetAddress || 'connected'}`
@@ -147,7 +138,6 @@ export default function HomeClient() {
     } catch {}
   }, [targetAddress])
 
-  // ---- SWR: collections cached per target address ----
   const collectionsKey = isConnected && targetAddress ? `warplet:collections:${targetAddress}` : null
 
   const { data: collectionsData, isLoading: collectionsLoading, error: collectionsError } = useSWR<CollectionSummary[]>(
@@ -173,22 +163,16 @@ export default function HomeClient() {
       merged.sort((a, b) => (b.tokenCount ?? 0) - (a.tokenCount ?? 0))
       return merged
     },
-    {
-      dedupingInterval: 60_000,
-      revalidateOnFocus: false,
-      keepPreviousData: true,
-    }
+    { dedupingInterval: 60_000, revalidateOnFocus: false, keepPreviousData: true }
   )
 
   const allCollections = collectionsData ?? []
   const err = collectionsError ? 'Failed to load collections' : null
   const loading = collectionsLoading
 
-  // Search filter for collections
   const filteredCollections = useMemo(() => {
     const q = collectionQuery.trim().toLowerCase()
     if (!q) return allCollections
-
     return allCollections.filter((c) => {
       const name = String(c.name || '').toLowerCase()
       const contract = String(c.contractAddress || '').toLowerCase()
@@ -253,36 +237,17 @@ export default function HomeClient() {
   const totalSize = gridVirtualizer.getTotalSize()
 
   return (
-    <main className="min-h-screen text-white" style={{ backgroundColor: '#1b0736' }}>
-      <div className="mx-auto max-w-md px-3 pb-24">
-        {/* Sticky header: marquee + disconnect bubble on right */}
+    <main className="min-h-screen text-white overflow-x-hidden" style={{ backgroundColor: '#1b0736' }}>
+      <div className="mx-auto max-w-md px-3 pb-24 overflow-x-hidden">
+        {/* Sticky marquee only */}
         <div className="sticky top-0 z-50 pt-3 pb-2" style={{ backgroundColor: '#1b0736' }}>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <Marquee text={bannerText} />
-            </div>
-
-            {isConnected ? (
-              <button
-                type="button"
-                onClick={() => {
-                  // disconnect + exit browsing mode if active
-                  try {
-                    disconnect()
-                  } catch {}
-                  if (addrParam) router.push('/')
-                }}
-                className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/90 backdrop-blur active:scale-[0.98] transition"
-                aria-label="Disconnect wallet"
-              >
-                Disconnect
-              </button>
-            ) : null}
-          </div>
+          <Marquee text={bannerText} />
         </div>
 
+        {/* Under marquee */}
         <section className="mt-2">
           <div className="rounded-3xl border border-white/10 bg-transparent p-3">
+            {/* Single connect/disconnect lives INSIDE ConnectBar */}
             <ConnectBar showMyWalletButton={isBrowsingOther} onMyWallet={onMyWallet} />
 
             {/* Browse other wallet */}
@@ -297,7 +262,7 @@ export default function HomeClient() {
                         if (e.key === 'Enter') onBrowseSearch()
                       }}
                       placeholder="Search wallet: 0x… / ENS / farcaster username"
-                      className="flex-1 bg-transparent px-3 py-2 text-sm !text-white placeholder:text-white/50 outline-none"
+                      className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm !text-white placeholder:text-white/50 outline-none"
                       style={{ color: '#ffffff', caretColor: '#ffffff' }}
                       autoCapitalize="none"
                       autoCorrect="off"
@@ -329,7 +294,7 @@ export default function HomeClient() {
                     value={collectionQuery}
                     onChange={(e) => setCollectionQuery(e.target.value)}
                     placeholder="Filter collections (name or contract)…"
-                    className="flex-1 bg-transparent px-3 py-2 text-sm !text-white placeholder:text-white/50 outline-none"
+                    className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm !text-white placeholder:text-white/50 outline-none"
                     style={{ color: '#ffffff', caretColor: '#ffffff' }}
                     autoCapitalize="none"
                     autoCorrect="off"
